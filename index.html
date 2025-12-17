@@ -5,7 +5,7 @@
 <title>Vehicle Geometry Viewer</title>
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 
-<!-- IMPORT MAP (MUST BE IN HEAD) -->
+<!-- IMPORT MAP -->
 <script type="importmap">
 {
   "imports": {
@@ -49,9 +49,7 @@
     gap: 6px 8px;
   }
 
-  label {
-    font-size: 11px;
-  }
+  label { font-size: 11px; }
 
   input[type="number"] {
     width: 100%;
@@ -145,7 +143,8 @@
 
 <script type="module">
 import * as THREE from 'three';
-import { OrbitControls } from 'https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/controls/OrbitControls.js';
+import { OrbitControls } from
+  'https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/controls/OrbitControls.js';
 
 let scene, camera, renderer, controls;
 let vehicleGroup = new THREE.Group();
@@ -154,6 +153,10 @@ init();
 buildVehicle();
 
 function init() {
+
+  // ***** CRITICAL: Z is UP *****
+  THREE.Object3D.DEFAULT_UP.set(0, 0, 1);
+
   scene = new THREE.Scene();
   scene.background = new THREE.Color(0xf0f0f0);
 
@@ -165,7 +168,11 @@ function init() {
   viewer.appendChild(renderer.domElement);
 
   controls = new OrbitControls(camera, renderer.domElement);
-  controls.target.set(0, 0, 40);
+  controls.enableDamping = true;
+  controls.dampingFactor = 0.08;
+  controls.minPolarAngle = 0;
+  controls.maxPolarAngle = Math.PI;
+  controls.screenSpacePanning = false;
   controls.update();
 
   window.addEventListener('resize', onResize);
@@ -183,6 +190,7 @@ function init() {
   scene.add(ground);
 
   scene.add(vehicleGroup);
+
   animate();
 }
 
@@ -242,6 +250,10 @@ function buildVehicle() {
     w.position.set(x, y, zLift);
     vehicleGroup.add(w);
   });
+
+  // TEMPORARY ORBIT TARGET (will become CG)
+  controls.target.set(0, -box1_L / 2, box1_H);
+  controls.update();
 }
 
 function animate() {
@@ -254,5 +266,6 @@ document.getElementById('updateBtn').onclick = buildVehicle;
 
 </body>
 </html>
+
 
 
