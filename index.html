@@ -161,26 +161,33 @@ function buildVehicle(){
   const yRear = +wheel_Yf.value - +wheel_dYr.value;
   const xOff = W/2;
 
-  [[-xOff,wheel_Yf.value],[xOff,wheel_Yf.value],[-xOff,yRear],[xOff,yRear]].forEach(([x,y])=>{
+  [[-xOff,+wheel_Yf.value],[xOff,+wheel_Yf.value],[-xOff,yRear],[xOff,yRear]].forEach(([x,y])=>{
     const w = new THREE.Mesh(wheelGeom,wheelMat);
     w.rotation.z = Math.PI/2;
     w.position.set(x,y,R);
     vehicleGroup.add(w);
   });
 
+  // Ground patch follows vehicle position (no rotation)
   groundGroup.position.set(0,-L/2,0);
+
+  // Orbit target (temp; will become CG)
   controls.target.set(0,-L/2,H);
   controls.update();
 }
 
-/* ---------- SPEED BUMP ---------- */
+/* ---------- SPEED BUMP UI ---------- */
 document.getElementById('addBumpBtn').onclick = ()=>{
   Swal.fire({
     title:'Add Speed Bump',
     html:`
-      <label>Height (in)<input id="bH" type="number" value="3"></label><br>
-      <label>Width Y (in)<input id="bW" type="number" value="24"></label><br>
-      <label>Offset from front (in)<input id="bY" type="number" value="60"></label>
+      <div style="text-align:left;font-size:12px;display:grid;grid-template-columns:1fr 1fr;gap:8px 10px">
+        <label>Height (in)<input id="bH" type="number" value="3" style="width:100%"></label>
+        <label>Width Y (in)<input id="bW" type="number" value="24" style="width:100%"></label>
+        <label style="grid-column:1 / span 2">Distance from front (in)
+          <input id="bY" type="number" value="60" style="width:100%">
+        </label>
+      </div>
     `,
     focusConfirm:false,
     preConfirm:()=>({
@@ -193,29 +200,65 @@ document.getElementById('addBumpBtn').onclick = ()=>{
   });
 };
 
-function addSpeedBump({h,w,y}){
-  const shape = new THREE.Shape();
-  const r = w/2;
-  shape.moveTo(-r,0);
-  shape.absarc(0,0,r,Math.PI,0,false);
-  shape.lineTo(r,0);
+/*
+Speed bump definition:
+- Cross-section is semicircle in (Y,Z)
+- Extruded across X for full road width
+- Positioned by distance from vehicle front face (world y=0)
+*/
+function addSpeedBump({h,w,y}) {
+  const L = +box1_L.value;
+  const W = +box1_W.value;
 
-  const geom = new THREE.ExtrudeGeometry(shape,{
-    depth: +box1_W.value,
-    bevelEnabled:false
+  // Radius based on requested width along Y
+  const r = Math.max(1e-6, w/2);
+
+  // Build 2D shape in "shape XY":
+  //   shape.x  -> longitudinal (vehicle Y)
+  //   shape.y  -> vertical      (vehicle Z)
+  const shape = new THREE.Shape();
+  shape.moveTo(-r, 0);
+  shape.absarc(0, 0, r, Math.PI, 0, false);
+  shape.lineTo(r, 0);
+
+  // Extrude depth becomes "old Z" axis; we will map old Z -> vehicle X
+  const geom = new THREE.ExtrudeGeometry(shape, {
+    depth: W,
+    bevelEnabled: false,
+    steps: 1
   });
 
-  geom.rotateX(Math.PI/2);
-  geom.translate(-box1_W.value/2, y, 0);
+  // Scale vertical to achieve requested height h (semicircle peak = r by default)
+  geom.scale(1, h / r, 1);
+
+  // Center the extrusion about X=0 by shifting old Z to [-W/2, +W/2]
+  geom.translate(0, 0, -W/2);
+
+  // Map axes explicitly:
+  // old coords: (x,y,z) = (Y_long, Z_vert, X_extrude)
+  // want:       (Xv,Yv,Zv) = (X_extrude, Y_long, Z_vert) = (z, x, y)
+  const P = new THREE.Matrix4().set(
+    0, 0, 1, 0,
+    1, 0, 0, 0,
+    0, 1, 0, 0,
+    0, 0, 0, 1
+  );
+  geom.applyMatrix4(P);
+
+  // Place bump by distance from front face (front face is at world y=0).
+  // groundGroup origin is at world y = -L/2, so local y must be y + L/2.
+  const yLocal = y + L/2;
+
+  // Move the bump to that location (already centered in X and sitting on Z=0)
+  geom.translate(0, yLocal, 0);
 
   const bump = new THREE.Mesh(
     geom,
-    new THREE.MeshStandardMaterial({color:0x888888})
+    new THREE.MeshStandardMaterial({ color: 0x888888 })
   );
 
-  bump.scale.z = h/r;
   groundGroup.add(bump);
-  roadFeatures.push({type:'bump',mesh:bump});
+  roadFeatures.push({ type:'bump', params:{h,w,y}, mesh:bump });
 }
 
 function animate(){
@@ -223,11 +266,12 @@ function animate(){
   renderer.render(scene,camera);
 }
 
-updateBtn.onclick = buildVehicle;
+document.getElementById('updateBtn').onclick = buildVehicle;
 </script>
 
 </body>
 </html>
+
 
 
 
