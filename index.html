@@ -1,0 +1,252 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<title>Vehicle Geometry Viewer</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+
+<style>
+  body {
+    margin: 0;
+    font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+    background: #eaeaea;
+  }
+
+  #container {
+    display: flex;
+    height: 100vh;
+  }
+
+  #ui {
+    width: 300px;
+    padding: 10px;
+    background: #ffffff;
+    border-right: 1px solid #ccc;
+    box-sizing: border-box;
+    overflow-y: auto;
+  }
+
+  #viewer {
+    flex: 1;
+    position: relative;
+  }
+
+  h2 { font-size: 14px; margin: 0 0 8px 0; }
+  h3 { font-size: 12px; margin: 10px 0 4px 0; border-bottom: 1px solid #ddd; }
+
+  .grid2 {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 6px 8px;
+  }
+
+  label {
+    font-size: 11px;
+  }
+
+  input[type="number"] {
+    width: 100%;
+    padding: 4px;
+    font-size: 11px;
+    box-sizing: border-box;
+  }
+
+  .units {
+    float: right;
+    font-size: 10px;
+    color: #777;
+  }
+
+  button {
+    width: 100%;
+    margin-top: 12px;
+    padding: 6px;
+    font-size: 12px;
+    cursor: pointer;
+  }
+</style>
+</head>
+
+<body>
+
+<div id="container">
+
+  <!-- UI PANEL -->
+  <div id="ui">
+    <h2>Vehicle Geometry</h2>
+
+    <h3>Box 1</h3>
+    <div class="grid2">
+      <label>Length (Y) <span class="units">in</span>
+        <input type="number" id="box1_L" value="120">
+      </label>
+      <label>Width (X) <span class="units">in</span>
+        <input type="number" id="box1_W" value="72">
+      </label>
+      <label>Height (Z) <span class="units">in</span>
+        <input type="number" id="box1_H" value="24">
+      </label>
+      <label>Weight <span class="units">lb</span>
+        <input type="number" id="box1_Wt" value="2500">
+      </label>
+    </div>
+
+    <h3>Box 2</h3>
+    <div class="grid2">
+      <label>Length (Y) <span class="units">in</span>
+        <input type="number" id="box2_L" value="60">
+      </label>
+      <label>Width (X) <span class="units">in</span>
+        <input type="number" id="box2_W" value="60">
+      </label>
+      <label>Height (Z) <span class="units">in</span>
+        <input type="number" id="box2_H" value="20">
+      </label>
+      <label>Weight <span class="units">lb</span>
+        <input type="number" id="box2_Wt" value="800">
+      </label>
+      <label>Front Offset (Y) <span class="units">in</span>
+        <input type="number" id="box2_dY" value="0">
+      </label>
+    </div>
+
+    <h3>Wheels</h3>
+    <div class="grid2">
+      <label>Diameter <span class="units">in</span>
+        <input type="number" id="wheel_D" value="32">
+      </label>
+      <label>Weight <span class="units">lb</span>
+        <input type="number" id="wheel_Wt" value="120">
+      </label>
+      <label>Front Y <span class="units">in</span>
+        <input type="number" id="wheel_Yf" value="-20">
+      </label>
+      <label>Rear Spacing <span class="units">in</span>
+        <input type="number" id="wheel_dYr" value="80">
+      </label>
+    </div>
+
+    <button id="updateBtn">Update Vehicle</button>
+  </div>
+
+  <!-- 3D VIEW -->
+  <div id="viewer"></div>
+
+</div>
+
+<script type="module">
+import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js';
+import { OrbitControls } from 'https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/controls/OrbitControls.js';
+
+let scene, camera, renderer, controls;
+let vehicleGroup = new THREE.Group();
+
+init();
+buildVehicle();
+
+function init() {
+  scene = new THREE.Scene();
+  scene.background = new THREE.Color(0xf0f0f0);
+
+  camera = new THREE.PerspectiveCamera(45, 1, 1, 5000);
+  camera.position.set(300, -500, 300);
+
+  renderer = new THREE.WebGLRenderer({ antialias: true });
+  renderer.setSize(viewer.clientWidth, viewer.clientHeight);
+  viewer.appendChild(renderer.domElement);
+
+  controls = new OrbitControls(camera, renderer.domElement);
+  controls.target.set(0, 0, 40);
+  controls.update();
+
+  window.addEventListener('resize', onResize);
+
+  scene.add(new THREE.AmbientLight(0xffffff, 0.6));
+  const light = new THREE.DirectionalLight(0xffffff, 0.8);
+  light.position.set(200, -200, 400);
+  scene.add(light);
+
+  // Ground plane
+  const ground = new THREE.Mesh(
+    new THREE.PlaneGeometry(2000, 2000),
+    new THREE.MeshStandardMaterial({ color: 0xcccccc })
+  );
+  ground.rotation.x = -Math.PI / 2;
+  scene.add(ground);
+
+  scene.add(vehicleGroup);
+
+  animate();
+}
+
+function onResize() {
+  camera.aspect = viewer.clientWidth / viewer.clientHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(viewer.clientWidth, viewer.clientHeight);
+}
+
+function buildVehicle() {
+  vehicleGroup.clear();
+
+  const box1_L = +box1_L.value;
+  const box1_W = +box1_W.value;
+  const box1_H = +box1_H.value;
+
+  const box2_L = +box2_L.value;
+  const box2_W = +box2_W.value;
+  const box2_H = +box2_H.value;
+  const box2_dY = +box2_dY.value;
+
+  const wheel_D = +wheel_D.value;
+  const wheel_Yf = +wheel_Yf.value;
+  const wheel_dYr = +wheel_dYr.value;
+
+  const R = wheel_D / 2;
+  const zLift = R;
+
+  // Box 1
+  const box1 = new THREE.Mesh(
+    new THREE.BoxGeometry(box1_W, box1_L, box1_H),
+    new THREE.MeshStandardMaterial({ color: 0x555555 })
+  );
+  box1.position.set(0, -box1_L / 2, box1_H / 2 + zLift);
+  vehicleGroup.add(box1);
+
+  // Box 2
+  const box2 = new THREE.Mesh(
+    new THREE.BoxGeometry(box2_W, box2_L, box2_H),
+    new THREE.MeshStandardMaterial({ color: 0xaaaaaa })
+  );
+  box2.position.set(0, box2_dY - box2_L / 2, box1_H + box2_H / 2 + zLift);
+  vehicleGroup.add(box2);
+
+  // Wheels
+  const wheelGeom = new THREE.CylinderGeometry(R, R, 4, 32);
+  const wheelMat = new THREE.MeshStandardMaterial({ color: 0x000000 });
+
+  const yRear = wheel_Yf - wheel_dYr;
+  const xOff = box1_W / 2;
+
+  [
+    [-xOff, wheel_Yf],
+    [ xOff, wheel_Yf],
+    [-xOff, yRear],
+    [ xOff, yRear]
+  ].forEach(([x, y]) => {
+    const w = new THREE.Mesh(wheelGeom, wheelMat);
+    w.rotation.z = Math.PI / 2;
+    w.position.set(x, y, zLift);
+    vehicleGroup.add(w);
+  });
+}
+
+function animate() {
+  requestAnimationFrame(animate);
+  renderer.render(scene, camera);
+}
+
+updateBtn.onclick = buildVehicle;
+</script>
+
+</body>
+</html>
