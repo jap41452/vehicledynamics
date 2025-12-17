@@ -148,19 +148,19 @@ import { OrbitControls } from
 
 let scene, camera, renderer, controls;
 let vehicleGroup = new THREE.Group();
+let groundGroup = new THREE.Group();
 
 init();
 buildVehicle();
 
 function init() {
 
-  // Z is vertical
+  // Z-up coordinate system
   THREE.Object3D.DEFAULT_UP.set(0, 0, 1);
 
   scene = new THREE.Scene();
   scene.background = new THREE.Color(0xf0f0f0);
 
-  // Improved depth precision
   camera = new THREE.PerspectiveCamera(45, 1, 0.1, 5000);
   camera.position.set(300, -500, 300);
 
@@ -171,11 +171,6 @@ function init() {
   controls = new OrbitControls(camera, renderer.domElement);
   controls.enableDamping = true;
   controls.dampingFactor = 0.08;
-
-  // Prevent grazing / under-ground views
-  controls.minPolarAngle = 0.01;
-  controls.maxPolarAngle = Math.PI / 2 - 0.01;
-
   controls.screenSpacePanning = false;
   controls.update();
 
@@ -186,19 +181,23 @@ function init() {
   light.position.set(200, -200, 400);
   scene.add(light);
 
-  // Ground plane (robust)
-  const ground = new THREE.Mesh(
-    new THREE.PlaneGeometry(2000, 2000),
+  // --- VEHICLE & GROUND GROUPS ---
+  scene.add(vehicleGroup);
+  scene.add(groundGroup);
+
+  // --- LOCAL GROUND PATCH ---
+  const groundPatch = new THREE.Mesh(
+    new THREE.PlaneGeometry(600, 600, 40, 40),
     new THREE.MeshStandardMaterial({
       color: 0xcccccc,
-      side: THREE.DoubleSide
+      side: THREE.DoubleSide,
+      depthWrite: false
     })
   );
-  ground.rotation.x = -Math.PI / 2;
-  ground.position.z = -0.5;   // depth separation
-  scene.add(ground);
+  groundPatch.rotation.x = -Math.PI / 2;
+  groundPatch.position.z = -0.5;
+  groundGroup.add(groundPatch);
 
-  scene.add(vehicleGroup);
   animate();
 }
 
@@ -227,6 +226,7 @@ function buildVehicle() {
   const R = wheel_D / 2;
   const zLift = R;
 
+  // Box 1
   const box1 = new THREE.Mesh(
     new THREE.BoxGeometry(box1_W, box1_L, box1_H),
     new THREE.MeshStandardMaterial({ color: 0x555555 })
@@ -234,6 +234,7 @@ function buildVehicle() {
   box1.position.set(0, -box1_L / 2, box1_H / 2 + zLift);
   vehicleGroup.add(box1);
 
+  // Box 2
   const box2 = new THREE.Mesh(
     new THREE.BoxGeometry(box2_W, box2_L, box2_H),
     new THREE.MeshStandardMaterial({ color: 0xaaaaaa })
@@ -241,6 +242,7 @@ function buildVehicle() {
   box2.position.set(0, box2_dY - box2_L / 2, box1_H + box2_H / 2 + zLift);
   vehicleGroup.add(box2);
 
+  // Wheels
   const wheelGeom = new THREE.CylinderGeometry(R, R, 4, 32);
   const wheelMat = new THREE.MeshStandardMaterial({ color: 0x000000 });
 
@@ -259,7 +261,10 @@ function buildVehicle() {
     vehicleGroup.add(w);
   });
 
-  // Temporary orbit target (will become CG)
+  // --- GROUND FOLLOWS VEHICLE POSITION (NO ROTATION) ---
+  groundGroup.position.set(0, -box1_L / 2, 0);
+
+  // --- ORBIT TARGET (TEMP: WILL BECOME TRUE CG) ---
   controls.target.set(0, -box1_L / 2, box1_H);
   controls.update();
 }
@@ -274,6 +279,7 @@ document.getElementById('updateBtn').onclick = buildVehicle;
 
 </body>
 </html>
+
 
 
 
