@@ -5,6 +5,15 @@
 <title>Vehicle Geometry Viewer</title>
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 
+<!-- IMPORT MAP MUST BE IN HEAD -->
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js"
+  }
+}
+</script>
+
 <style>
   body {
     margin: 0;
@@ -134,17 +143,8 @@
 
 </div>
 
-<script type="importmap">
-{
-  "imports": {
-    "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js"
-  }
-}
-</script>
-
- 
 <script type="module">
-import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js';
+import * as THREE from 'three';
 import { OrbitControls } from 'https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/controls/OrbitControls.js';
 
 let scene, camera, renderer, controls;
@@ -175,7 +175,6 @@ function init() {
   light.position.set(200, -200, 400);
   scene.add(light);
 
-  // Ground plane
   const ground = new THREE.Mesh(
     new THREE.PlaneGeometry(2000, 2000),
     new THREE.MeshStandardMaterial({ color: 0xcccccc })
@@ -184,7 +183,6 @@ function init() {
   scene.add(ground);
 
   scene.add(vehicleGroup);
-
   animate();
 }
 
@@ -213,7 +211,6 @@ function buildVehicle() {
   const R = wheel_D / 2;
   const zLift = R;
 
-  // Box 1
   const box1 = new THREE.Mesh(
     new THREE.BoxGeometry(box1_W, box1_L, box1_H),
     new THREE.MeshStandardMaterial({ color: 0x555555 })
@@ -221,7 +218,6 @@ function buildVehicle() {
   box1.position.set(0, -box1_L / 2, box1_H / 2 + zLift);
   vehicleGroup.add(box1);
 
-  // Box 2
   const box2 = new THREE.Mesh(
     new THREE.BoxGeometry(box2_W, box2_L, box2_H),
     new THREE.MeshStandardMaterial({ color: 0xaaaaaa })
@@ -229,7 +225,6 @@ function buildVehicle() {
   box2.position.set(0, box2_dY - box2_L / 2, box1_H + box2_H / 2 + zLift);
   vehicleGroup.add(box2);
 
-  // Wheels
   const wheelGeom = new THREE.CylinderGeometry(R, R, 4, 32);
   const wheelMat = new THREE.MeshStandardMaterial({ color: 0x000000 });
 
@@ -259,3 +254,4 @@ updateBtn.onclick = buildVehicle;
 
 </body>
 </html>
+
