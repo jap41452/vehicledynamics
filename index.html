@@ -5,7 +5,6 @@
 <title>Vehicle Geometry Viewer</title>
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 
-<!-- IMPORT MAP -->
 <script type="importmap">
 {
   "imports": {
@@ -15,136 +14,61 @@
 </script>
 
 <style>
-  body {
-    margin: 0;
-    font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
-    background: #eaeaea;
-  }
-
-  #container {
-    display: flex;
-    height: 100vh;
-  }
-
-  #ui {
-    width: 300px;
-    padding: 10px;
-    background: #ffffff;
-    border-right: 1px solid #ccc;
-    box-sizing: border-box;
-    overflow-y: auto;
-  }
-
-  #viewer {
-    flex: 1;
-    position: relative;
-  }
-
-  h2 { font-size: 14px; margin: 0 0 8px 0; }
-  h3 { font-size: 12px; margin: 10px 0 4px 0; border-bottom: 1px solid #ddd; }
-
-  .grid2 {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 6px 8px;
-  }
-
-  label { font-size: 11px; }
-
-  input[type="number"] {
-    width: 100%;
-    padding: 4px;
-    font-size: 11px;
-    box-sizing: border-box;
-  }
-
-  .units {
-    float: right;
-    font-size: 10px;
-    color: #777;
-  }
-
-  button {
-    width: 100%;
-    margin-top: 12px;
-    padding: 6px;
-    font-size: 12px;
-    cursor: pointer;
-  }
+  body { margin:0; font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif; background:#eaeaea; }
+  #container { display:flex; height:100vh; }
+  #ui { width:300px; padding:10px; background:#fff; border-right:1px solid #ccc; box-sizing:border-box; overflow-y:auto; }
+  #viewer { flex:1; position:relative; }
+  h2{font-size:14px;margin:0 0 8px 0;}
+  h3{font-size:12px;margin:10px 0 4px 0;border-bottom:1px solid #ddd;}
+  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:6px 8px;}
+  label{font-size:11px;}
+  input[type="number"]{width:100%;padding:4px;font-size:11px;box-sizing:border-box;}
+  .units{float:right;font-size:10px;color:#777;}
+  button{width:100%;margin-top:12px;padding:6px;font-size:12px;cursor:pointer;}
 </style>
 </head>
 
 <body>
-
 <div id="container">
 
-  <!-- UI PANEL -->
   <div id="ui">
     <h2>Vehicle Geometry</h2>
 
     <h3>Box 1</h3>
     <div class="grid2">
-      <label>Length (Y) <span class="units">in</span>
-        <input type="number" id="box1_L" value="120">
-      </label>
-      <label>Width (X) <span class="units">in</span>
-        <input type="number" id="box1_W" value="72">
-      </label>
-      <label>Height (Z) <span class="units">in</span>
-        <input type="number" id="box1_H" value="24">
-      </label>
-      <label>Weight <span class="units">lb</span>
-        <input type="number" id="box1_Wt" value="2500">
-      </label>
+      <label>Length (Y) <span class="units">in</span><input type="number" id="box1_L" value="120"></label>
+      <label>Width (X)  <span class="units">in</span><input type="number" id="box1_W" value="72"></label>
+      <label>Height (Z) <span class="units">in</span><input type="number" id="box1_H" value="24"></label>
+      <label>Weight      <span class="units">lb</span><input type="number" id="box1_Wt" value="2500"></label>
     </div>
 
     <h3>Box 2</h3>
     <div class="grid2">
-      <label>Length (Y) <span class="units">in</span>
-        <input type="number" id="box2_L" value="60">
-      </label>
-      <label>Width (X) <span class="units">in</span>
-        <input type="number" id="box2_W" value="60">
-      </label>
-      <label>Height (Z) <span class="units">in</span>
-        <input type="number" id="box2_H" value="20">
-      </label>
-      <label>Weight <span class="units">lb</span>
-        <input type="number" id="box2_Wt" value="800">
-      </label>
-      <label>Front Offset (Y) <span class="units">in</span>
-        <input type="number" id="box2_dY" value="0">
-      </label>
+      <label>Length (Y) <span class="units">in</span><input type="number" id="box2_L" value="60"></label>
+      <label>Width (X)  <span class="units">in</span><input type="number" id="box2_W" value="60"></label>
+      <label>Height (Z) <span class="units">in</span><input type="number" id="box2_H" value="20"></label>
+      <label>Weight      <span class="units">lb</span><input type="number" id="box2_Wt" value="800"></label>
+      <label>Front Offset (Y) <span class="units">in</span><input type="number" id="box2_dY" value="0"></label>
     </div>
 
     <h3>Wheels</h3>
     <div class="grid2">
-      <label>Diameter <span class="units">in</span>
-        <input type="number" id="wheel_D" value="32">
-      </label>
-      <label>Weight <span class="units">lb</span>
-        <input type="number" id="wheel_Wt" value="120">
-      </label>
-      <label>Front Y <span class="units">in</span>
-        <input type="number" id="wheel_Yf" value="-20">
-      </label>
-      <label>Rear Spacing <span class="units">in</span>
-        <input type="number" id="wheel_dYr" value="80">
-      </label>
+      <label>Diameter <span class="units">in</span><input type="number" id="wheel_D" value="32"></label>
+      <label>Weight   <span class="units">lb</span><input type="number" id="wheel_Wt" value="120"></label>
+      <label>Front Y  <span class="units">in</span><input type="number" id="wheel_Yf" value="-20"></label>
+      <label>Rear Spacing <span class="units">in</span><input type="number" id="wheel_dYr" value="80"></label>
     </div>
 
     <button id="updateBtn">Update Vehicle</button>
   </div>
 
-  <!-- 3D VIEW -->
   <div id="viewer"></div>
 
 </div>
 
 <script type="module">
 import * as THREE from 'three';
-import { OrbitControls } from
-  'https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/controls/OrbitControls.js';
+import { OrbitControls } from 'https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/controls/OrbitControls.js';
 
 let scene, camera, renderer, controls;
 let vehicleGroup = new THREE.Group();
@@ -154,8 +78,7 @@ init();
 buildVehicle();
 
 function init() {
-
-  // Z-up coordinate system
+  // Z-up
   THREE.Object3D.DEFAULT_UP.set(0, 0, 1);
 
   scene = new THREE.Scene();
@@ -181,11 +104,11 @@ function init() {
   light.position.set(200, -200, 400);
   scene.add(light);
 
-  // --- VEHICLE & GROUND GROUPS ---
   scene.add(vehicleGroup);
   scene.add(groundGroup);
 
   // --- LOCAL GROUND PATCH ---
+  // With Z-up, PlaneGeometry is already in the XY plane (normal +Z), so DO NOT rotate it.
   const groundPatch = new THREE.Mesh(
     new THREE.PlaneGeometry(600, 600, 40, 40),
     new THREE.MeshStandardMaterial({
@@ -194,8 +117,7 @@ function init() {
       depthWrite: false
     })
   );
-  groundPatch.rotation.x = -Math.PI / 2;
-  groundPatch.position.z = -0.5;
+  groundPatch.position.z = -0.5; // slight drop below z=0
   groundGroup.add(groundPatch);
 
   animate();
@@ -226,7 +148,6 @@ function buildVehicle() {
   const R = wheel_D / 2;
   const zLift = R;
 
-  // Box 1
   const box1 = new THREE.Mesh(
     new THREE.BoxGeometry(box1_W, box1_L, box1_H),
     new THREE.MeshStandardMaterial({ color: 0x555555 })
@@ -234,7 +155,6 @@ function buildVehicle() {
   box1.position.set(0, -box1_L / 2, box1_H / 2 + zLift);
   vehicleGroup.add(box1);
 
-  // Box 2
   const box2 = new THREE.Mesh(
     new THREE.BoxGeometry(box2_W, box2_L, box2_H),
     new THREE.MeshStandardMaterial({ color: 0xaaaaaa })
@@ -242,7 +162,6 @@ function buildVehicle() {
   box2.position.set(0, box2_dY - box2_L / 2, box1_H + box2_H / 2 + zLift);
   vehicleGroup.add(box2);
 
-  // Wheels
   const wheelGeom = new THREE.CylinderGeometry(R, R, 4, 32);
   const wheelMat = new THREE.MeshStandardMaterial({ color: 0x000000 });
 
@@ -261,10 +180,10 @@ function buildVehicle() {
     vehicleGroup.add(w);
   });
 
-  // --- GROUND FOLLOWS VEHICLE POSITION (NO ROTATION) ---
+  // Ground follows vehicle position in XY only (no rotation)
   groundGroup.position.set(0, -box1_L / 2, 0);
 
-  // --- ORBIT TARGET (TEMP: WILL BECOME TRUE CG) ---
+  // Orbit target (temp; will become CG)
   controls.target.set(0, -box1_L / 2, box1_H);
   controls.update();
 }
@@ -279,6 +198,7 @@ document.getElementById('updateBtn').onclick = buildVehicle;
 
 </body>
 </html>
+
 
 
 
