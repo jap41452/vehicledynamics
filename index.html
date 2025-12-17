@@ -154,13 +154,14 @@ buildVehicle();
 
 function init() {
 
-  // ***** CRITICAL: Z is UP *****
+  // Z is vertical
   THREE.Object3D.DEFAULT_UP.set(0, 0, 1);
 
   scene = new THREE.Scene();
   scene.background = new THREE.Color(0xf0f0f0);
 
-  camera = new THREE.PerspectiveCamera(45, 1, 1, 5000);
+  // Improved depth precision
+  camera = new THREE.PerspectiveCamera(45, 1, 0.1, 5000);
   camera.position.set(300, -500, 300);
 
   renderer = new THREE.WebGLRenderer({ antialias: true });
@@ -170,8 +171,11 @@ function init() {
   controls = new OrbitControls(camera, renderer.domElement);
   controls.enableDamping = true;
   controls.dampingFactor = 0.08;
-  controls.minPolarAngle = 0;
-  controls.maxPolarAngle = Math.PI;
+
+  // Prevent grazing / under-ground views
+  controls.minPolarAngle = 0.01;
+  controls.maxPolarAngle = Math.PI / 2 - 0.01;
+
   controls.screenSpacePanning = false;
   controls.update();
 
@@ -182,15 +186,19 @@ function init() {
   light.position.set(200, -200, 400);
   scene.add(light);
 
+  // Ground plane (robust)
   const ground = new THREE.Mesh(
     new THREE.PlaneGeometry(2000, 2000),
-    new THREE.MeshStandardMaterial({ color: 0xcccccc })
+    new THREE.MeshStandardMaterial({
+      color: 0xcccccc,
+      side: THREE.DoubleSide
+    })
   );
   ground.rotation.x = -Math.PI / 2;
+  ground.position.z = -0.5;   // depth separation
   scene.add(ground);
 
   scene.add(vehicleGroup);
-
   animate();
 }
 
@@ -251,7 +259,7 @@ function buildVehicle() {
     vehicleGroup.add(w);
   });
 
-  // TEMPORARY ORBIT TARGET (will become CG)
+  // Temporary orbit target (will become CG)
   controls.target.set(0, -box1_L / 2, box1_H);
   controls.update();
 }
@@ -266,6 +274,7 @@ document.getElementById('updateBtn').onclick = buildVehicle;
 
 </body>
 </html>
+
 
 
 
