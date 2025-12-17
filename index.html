@@ -5,7 +5,7 @@
 <title>Vehicle Geometry Viewer</title>
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 
-<!-- IMPORT MAP MUST BE IN HEAD -->
+<!-- IMPORT MAP (MUST BE IN HEAD) -->
 <script type="importmap">
 {
   "imports": {
@@ -195,18 +195,18 @@ function onResize() {
 function buildVehicle() {
   vehicleGroup.clear();
 
-  const box1_L = +box1_L.value;
-  const box1_W = +box1_W.value;
-  const box1_H = +box1_H.value;
+  const box1_L = +document.getElementById('box1_L').value;
+  const box1_W = +document.getElementById('box1_W').value;
+  const box1_H = +document.getElementById('box1_H').value;
 
-  const box2_L = +box2_L.value;
-  const box2_W = +box2_W.value;
-  const box2_H = +box2_H.value;
-  const box2_dY = +box2_dY.value;
+  const box2_L = +document.getElementById('box2_L').value;
+  const box2_W = +document.getElementById('box2_W').value;
+  const box2_H = +document.getElementById('box2_H').value;
+  const box2_dY = +document.getElementById('box2_dY').value;
 
-  const wheel_D = +wheel_D.value;
-  const wheel_Yf = +wheel_Yf.value;
-  const wheel_dYr = +wheel_dYr.value;
+  const wheel_D = +document.getElementById('wheel_D').value;
+  const wheel_Yf = +document.getElementById('wheel_Yf').value;
+  const wheel_dYr = +document.getElementById('wheel_dYr').value;
 
   const R = wheel_D / 2;
   const zLift = R;
@@ -249,9 +249,10 @@ function animate() {
   renderer.render(scene, camera);
 }
 
-updateBtn.onclick = buildVehicle;
+document.getElementById('updateBtn').onclick = buildVehicle;
 </script>
 
 </body>
 </html>
+
 
