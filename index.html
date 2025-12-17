@@ -23,10 +23,9 @@
 
   h2{font-size:14px;margin:0 0 8px 0;}
   h3{font-size:12px;margin:10px 0 4px 0;border-bottom:1px solid #ddd;}
-
   .grid2{display:grid;grid-template-columns:1fr 1fr;gap:6px 8px;}
   label{font-size:11px;}
-  input[type="number"]{width:100%;padding:4px;font-size:11px;box-sizing:border-box;}
+  input[type="number"], select{width:100%;padding:4px;font-size:11px;box-sizing:border-box;}
   .units{float:right;font-size:10px;color:#777;}
   button{width:100%;margin-top:8px;padding:6px;font-size:12px;cursor:pointer;}
 </style>
@@ -67,6 +66,7 @@
 
   <h3>Road Features</h3>
   <button id="addBumpBtn">Add Speed Bump</button>
+  <button id="addPotholeBtn">Add Pothole</button>
 </div>
 
 <div id="viewer"></div>
@@ -80,7 +80,6 @@ import { OrbitControls } from 'https://cdn.jsdelivr.net/npm/three@0.160.0/exampl
 let scene, camera, renderer, controls;
 let vehicleGroup = new THREE.Group();
 let groundGroup = new THREE.Group();
-let roadFeatures = [];
 
 init();
 buildVehicle();
@@ -113,14 +112,9 @@ function init() {
   scene.add(vehicleGroup);
   scene.add(groundGroup);
 
-  // Local ground patch (XY plane)
   const groundPatch = new THREE.Mesh(
     new THREE.PlaneGeometry(600,600,40,40),
-    new THREE.MeshStandardMaterial({
-      color:0xcccccc,
-      side:THREE.DoubleSide,
-      depthWrite:false
-    })
+    new THREE.MeshStandardMaterial({ color:0xcccccc, side:THREE.DoubleSide, depthWrite:false })
   );
   groundPatch.position.z = -0.5;
   groundGroup.add(groundPatch);
@@ -168,97 +162,107 @@ function buildVehicle(){
     vehicleGroup.add(w);
   });
 
-  // Ground patch follows vehicle position (no rotation)
   groundGroup.position.set(0,-L/2,0);
-
-  // Orbit target (temp; will become CG)
   controls.target.set(0,-L/2,H);
   controls.update();
 }
 
-/* ---------- SPEED BUMP UI ---------- */
+/* ---------- SPEED BUMP ---------- */
 document.getElementById('addBumpBtn').onclick = ()=>{
   Swal.fire({
     title:'Add Speed Bump',
     html:`
-      <div style="text-align:left;font-size:12px;display:grid;grid-template-columns:1fr 1fr;gap:8px 10px">
-        <label>Height (in)<input id="bH" type="number" value="3" style="width:100%"></label>
-        <label>Width Y (in)<input id="bW" type="number" value="24" style="width:100%"></label>
-        <label style="grid-column:1 / span 2">Distance from front (in)
-          <input id="bY" type="number" value="60" style="width:100%">
-        </label>
-      </div>
+      <label>Height (in)<input id="bH" type="number" value="3"></label><br>
+      <label>Width Y (in)<input id="bW" type="number" value="24"></label><br>
+      <label>Distance from front (in)<input id="bY" type="number" value="60"></label>
     `,
-    focusConfirm:false,
     preConfirm:()=>({
-      h:+document.getElementById('bH').value,
-      w:+document.getElementById('bW').value,
-      y:+document.getElementById('bY').value
+      h:+bH.value, w:+bW.value, y:+bY.value
     })
-  }).then(res=>{
-    if(res.value) addSpeedBump(res.value);
-  });
+  }).then(r=>r.value && addSpeedBump(r.value));
 };
 
-/*
-Speed bump definition:
-- Cross-section is semicircle in (Y,Z)
-- Extruded across X for full road width
-- Positioned by distance from vehicle front face (world y=0)
-*/
 function addSpeedBump({h,w,y}) {
   const L = +box1_L.value;
   const W = +box1_W.value;
+  const r = w/2;
 
-  // Radius based on requested width along Y
-  const r = Math.max(1e-6, w/2);
-
-  // Build 2D shape in "shape XY":
-  //   shape.x  -> longitudinal (vehicle Y)
-  //   shape.y  -> vertical      (vehicle Z)
   const shape = new THREE.Shape();
-  shape.moveTo(-r, 0);
-  shape.absarc(0, 0, r, Math.PI, 0, false);
-  shape.lineTo(r, 0);
+  shape.moveTo(-r,0);
+  shape.absarc(0,0,r,Math.PI,0,false);
+  shape.lineTo(r,0);
 
-  // Extrude depth becomes "old Z" axis; we will map old Z -> vehicle X
-  const geom = new THREE.ExtrudeGeometry(shape, {
-    depth: W,
-    bevelEnabled: false,
-    steps: 1
+  const geom = new THREE.ExtrudeGeometry(shape,{ depth:W, bevelEnabled:false });
+  geom.scale(1,-h/r,1);   // FIX: flip and scale vertically
+  geom.translate(0,0,-W/2);
+
+  // Map (x,y,z) -> (z,x,y)
+  geom.applyMatrix4(new THREE.Matrix4().set(
+    0,0,1,0,
+    1,0,0,0,
+    0,1,0,0,
+    0,0,0,1
+  ));
+
+  geom.translate(0,y + L/2,0);
+
+  groundGroup.add(new THREE.Mesh(
+    geom,new THREE.MeshStandardMaterial({color:0x888888})
+  ));
+}
+
+/* ---------- POTHOLE ---------- */
+document.getElementById('addPotholeBtn').onclick = ()=>{
+  Swal.fire({
+    title:'Add Pothole',
+    html:`
+      <label>Depth (in)<input id="pD" type="number" value="2"></label><br>
+      <label>Length Y (in)<input id="pL" type="number" value="18"></label><br>
+      <label>Distance from front (in)<input id="pY" type="number" value="48"></label><br>
+      <label>Side
+        <select id="pS">
+          <option>Left</option>
+          <option>Right</option>
+          <option>Both</option>
+        </select>
+      </label>
+    `,
+    preConfirm:()=>({
+      d:+pD.value, l:+pL.value, y:+pY.value, s:pS.value
+    })
+  }).then(r=>r.value && addPothole(r.value));
+};
+
+function addPothole({d,l,y,s}) {
+  const L = +box1_L.value;
+  const W = +box1_W.value;
+  const xOff = W/2;
+  const sides = s==='Both' ? [-xOff,xOff] : [s==='Left'?-xOff:xOff];
+
+  sides.forEach(x=>{
+    const geom = new THREE.BufferGeometry();
+    const h = d;
+
+    const verts = new Float32Array([
+      -l/2,0,0,  l/2,0,0,  0,0,-h
+    ]);
+
+    geom.setAttribute('position',new THREE.BufferAttribute(verts,3));
+    geom.setIndex([0,2,1]);
+
+    geom.applyMatrix4(new THREE.Matrix4().set(
+      0,0,1,0,
+      1,0,0,0,
+      0,1,0,0,
+      0,0,0,1
+    ));
+
+    geom.translate(x, y + L/2, 0);
+
+    groundGroup.add(new THREE.Mesh(
+      geom,new THREE.MeshStandardMaterial({color:0x666666,side:THREE.DoubleSide})
+    ));
   });
-
-  // Scale vertical to achieve requested height h (semicircle peak = r by default)
-  geom.scale(1, h / r, 1);
-
-  // Center the extrusion about X=0 by shifting old Z to [-W/2, +W/2]
-  geom.translate(0, 0, -W/2);
-
-  // Map axes explicitly:
-  // old coords: (x,y,z) = (Y_long, Z_vert, X_extrude)
-  // want:       (Xv,Yv,Zv) = (X_extrude, Y_long, Z_vert) = (z, x, y)
-  const P = new THREE.Matrix4().set(
-    0, 0, 1, 0,
-    1, 0, 0, 0,
-    0, 1, 0, 0,
-    0, 0, 0, 1
-  );
-  geom.applyMatrix4(P);
-
-  // Place bump by distance from front face (front face is at world y=0).
-  // groundGroup origin is at world y = -L/2, so local y must be y + L/2.
-  const yLocal = y + L/2;
-
-  // Move the bump to that location (already centered in X and sitting on Z=0)
-  geom.translate(0, yLocal, 0);
-
-  const bump = new THREE.Mesh(
-    geom,
-    new THREE.MeshStandardMaterial({ color: 0x888888 })
-  );
-
-  groundGroup.add(bump);
-  roadFeatures.push({ type:'bump', params:{h,w,y}, mesh:bump });
 }
 
 function animate(){
@@ -266,11 +270,12 @@ function animate(){
   renderer.render(scene,camera);
 }
 
-document.getElementById('updateBtn').onclick = buildVehicle;
+updateBtn.onclick = buildVehicle;
 </script>
 
 </body>
 </html>
+
 
 
 
