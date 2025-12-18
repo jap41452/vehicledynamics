@@ -16,23 +16,41 @@
 <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
 
 <style>
-  body { margin:0; font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif; background:#eaeaea; }
-  #container { display:flex; height:100vh; }
-  #ui { width:300px; padding:10px; background:#fff; border-right:1px solid #ccc; box-sizing:border-box; overflow-y:auto; }
-  #viewer { flex:1; position:relative; }
+body {
+  margin:0;
+  font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;
+  background:#eaeaea;
+}
+#container { display:flex; height:100vh; }
+#ui {
+  width:300px;
+  padding:10px;
+  background:#fff;
+  border-right:1px solid #ccc;
+  box-sizing:border-box;
+  overflow-y:auto;
+}
+#viewer { flex:1; position:relative; }
 
-  h2{font-size:14px;margin:0 0 8px 0;}
-  h3{font-size:12px;margin:10px 0 4px 0;border-bottom:1px solid #ddd;}
-  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:6px 8px;}
-  label{font-size:11px;}
-  input[type="number"], select{width:100%;padding:4px;font-size:11px;box-sizing:border-box;}
-  .units{float:right;font-size:10px;color:#777;}
-  button{width:100%;margin-top:6px;padding:6px;font-size:12px;cursor:pointer;}
+h2 { font-size:14px; margin:0 0 8px 0; }
+h3 { font-size:12px; margin:10px 0 4px 0; border-bottom:1px solid #ddd; }
 
-  details { margin-top:8px; }
-  summary { font-size:12px; font-weight:600; cursor:pointer; }
-  .feature-row { font-size:11px; margin:6px 0; }
-  .feature-row button { width:auto; margin-left:6px; padding:2px 6px; font-size:10px; }
+.grid2 { display:grid; grid-template-columns:1fr 1fr; gap:6px 8px; }
+label { font-size:11px; }
+input, select { width:100%; padding:4px; font-size:11px; box-sizing:border-box; }
+
+button {
+  width:100%;
+  margin-top:6px;
+  padding:6px;
+  font-size:12px;
+  cursor:pointer;
+}
+
+details { margin-top:8px; }
+summary { font-size:12px; font-weight:600; cursor:pointer; }
+.feature-row { font-size:11px; margin:4px 0; }
+.feature-row button { margin-left:6px; font-size:10px; padding:2px 6px; }
 </style>
 </head>
 
@@ -44,19 +62,19 @@
 
   <h3>Box 1</h3>
   <div class="grid2">
-    <label>Length (Y)<input id="box1_L" type="number" value="120"></label>
-    <label>Width (X)<input id="box1_W" type="number" value="72"></label>
-    <label>Height (Z)<input id="box1_H" type="number" value="24"></label>
+    <label>Length Y<input id="box1_L" type="number" value="120"></label>
+    <label>Width X<input id="box1_W" type="number" value="72"></label>
+    <label>Height Z<input id="box1_H" type="number" value="24"></label>
     <label>Weight<input id="box1_Wt" type="number" value="2500"></label>
   </div>
 
   <h3>Box 2</h3>
   <div class="grid2">
-    <label>Length (Y)<input id="box2_L" type="number" value="60"></label>
-    <label>Width (X)<input id="box2_W" type="number" value="60"></label>
-    <label>Height (Z)<input id="box2_H" type="number" value="20"></label>
+    <label>Length Y<input id="box2_L" type="number" value="60"></label>
+    <label>Width X<input id="box2_W" type="number" value="60"></label>
+    <label>Height Z<input id="box2_H" type="number" value="20"></label>
     <label>Weight<input id="box2_Wt" type="number" value="800"></label>
-    <label>Front Offset (Y)<input id="box2_dY" type="number" value="0"></label>
+    <label>Front Offset Y<input id="box2_dY" type="number" value="0"></label>
   </div>
 
   <h3>Wheels</h3>
@@ -84,13 +102,14 @@
 
 <script type="module">
 import * as THREE from 'three';
-import { OrbitControls } from 'https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/controls/OrbitControls.js';
+import { OrbitControls } from
+  'https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/controls/OrbitControls.js';
 
 let scene, camera, renderer, controls;
 let vehicleGroup = new THREE.Group();
 let groundGroup = new THREE.Group();
 let roadFeatures = [];
-let nextFeatureId = 1;
+let nextId = 1;
 
 init();
 buildVehicle();
@@ -113,7 +132,7 @@ function init() {
   controls.enableDamping = true;
   controls.dampingFactor = 0.08;
 
-  window.addEventListener('resize',()=> {
+  window.addEventListener('resize',()=>{
     camera.aspect = viewer.clientWidth/viewer.clientHeight;
     camera.updateProjectionMatrix();
     renderer.setSize(viewer.clientWidth,viewer.clientHeight);
@@ -129,7 +148,11 @@ function init() {
 
   const ground = new THREE.Mesh(
     new THREE.PlaneGeometry(600,600,20,20),
-    new THREE.MeshStandardMaterial({color:0xcccccc,side:THREE.DoubleSide,depthWrite:false})
+    new THREE.MeshStandardMaterial({
+      color:0xcccccc,
+      side:THREE.DoubleSide,
+      depthWrite:false
+    })
   );
   ground.position.z = -0.5;
   groundGroup.add(ground);
@@ -165,7 +188,8 @@ function buildVehicle() {
   const yRear = +wheel_Yf.value - +wheel_dYr.value;
   const xOff = W/2;
 
-  [[-xOff,wheel_Yf.value],[xOff,wheel_Yf.value],[-xOff,yRear],[xOff,yRear]].forEach(([x,y])=>{
+  [[-xOff,wheel_Yf.value],[xOff,wheel_Yf.value],
+   [-xOff,yRear],[xOff,yRear]].forEach(([x,y])=>{
     const w = new THREE.Mesh(wheelGeom,wheelMat);
     w.rotation.z = Math.PI/2;
     w.position.set(x,y,R);
@@ -177,36 +201,40 @@ function buildVehicle() {
   controls.update();
 }
 
-/* ---------- ROAD FEATURE BUILDER (CANONICAL) ---------- */
-function buildProfileFeature({ profileYZ, widthX, centerX, startY, material }) {
+/* ---------- CANONICAL ROAD FEATURE BUILDER ---------- */
+function buildRoadFeature({ profileYZ, widthX, startY, material }) {
+
   const shape = new THREE.Shape();
   shape.moveTo(profileYZ[0][0], profileYZ[0][1]);
   for (let i=1;i<profileYZ.length;i++) {
     shape.lineTo(profileYZ[i][0], profileYZ[i][1]);
   }
 
-  const geom = new THREE.ExtrudeGeometry(shape, {
+  const geom = new THREE.ExtrudeGeometry(shape,{
     depth: widthX,
     bevelEnabled:false
   });
 
-  // Center extrusion about X = 0
+  // Extrusion is local +Z → rotate to vehicle +X
+  geom.rotateY(Math.PI/2);
+
+  // Center width about X=0
   geom.translate(0,0,-widthX/2);
 
-  // Place so leading edge starts at requested Y
+  // Start at requested Y
   geom.translate(0,startY,0);
 
   return new THREE.Mesh(geom, material);
 }
 
 /* ---------- SPEED BUMP ---------- */
-addBumpBtn.onclick = ()=> {
+addBumpBtn.onclick = ()=>{
   Swal.fire({
     title:'Add Speed Bump',
     html:`
       <label>Height<input id="bH" type="number" value="3"></label><br>
       <label>Width Y<input id="bW" type="number" value="24"></label><br>
-      <label>Start distance from front<input id="bY" type="number" value="60"></label>
+      <label>Start from front<input id="bY" type="number" value="60"></label>
     `,
     preConfirm:()=>({ h:+bH.value, w:+bW.value, y:+bY.value })
   }).then(r=>r.value && addSpeedBump(r.value));
@@ -214,34 +242,32 @@ addBumpBtn.onclick = ()=> {
 
 function addSpeedBump({h,w,y}) {
   const L = +box1_L.value;
-  const W = +box1_W.value;
   const r = w/2;
-
   const pts = [];
+
   for (let i=0;i<=24;i++) {
     const t = Math.PI*i/24;
-    pts.push([ r*(t/Math.PI*2 -1), h*Math.sin(t) ]);
+    pts.push([ r*(t/Math.PI), h*Math.sin(t) ]);
   }
 
-  const mesh = buildProfileFeature({
+  const mesh = buildRoadFeature({
     profileYZ: pts,
-    widthX: W,
-    centerX: 0,
+    widthX: +box1_W.value,
     startY: y + L/2,
     material: new THREE.MeshStandardMaterial({color:0x888888})
   });
 
-  addFeature('Speed Bump', {h,w,y}, mesh);
+  addFeature('Speed Bump', mesh);
 }
 
 /* ---------- POTHOLE ---------- */
-addPotholeBtn.onclick = ()=> {
+addPotholeBtn.onclick = ()=>{
   Swal.fire({
     title:'Add Pothole',
     html:`
       <label>Depth<input id="pD" type="number" value="2"></label><br>
       <label>Length Y<input id="pL" type="number" value="18"></label><br>
-      <label>Start distance from front<input id="pY" type="number" value="48"></label><br>
+      <label>Start from front<input id="pY" type="number" value="48"></label><br>
       <label>Side
         <select id="pS">
           <option>Left</option>
@@ -261,24 +287,26 @@ function addPothole({d,l,y,s}) {
   const xs = s==='Both' ? [-track,track] : [s==='Left'?-track:track];
 
   xs.forEach(x=>{
-    const mesh = buildProfileFeature({
+    const mesh = buildRoadFeature({
       profileYZ: [[0,0],[l/2,-d],[l,0]],
       widthX: 12,
-      centerX: x,
       startY: y + L/2,
-      material: new THREE.MeshStandardMaterial({color:0x666666,side:THREE.DoubleSide})
+      material: new THREE.MeshStandardMaterial({
+        color:0x666666,
+        side:THREE.DoubleSide
+      })
     });
     mesh.position.x = x;
-    addFeature(`Pothole (${s})`, {d,l,y,s}, mesh);
+    addFeature(`Pothole (${s})`, mesh);
   });
 }
 
-/* ---------- FEATURE MANAGEMENT ---------- */
-function addFeature(type, params, mesh) {
-  mesh.userData.id = nextFeatureId;
+/* ---------- FEATURE MANAGER ---------- */
+function addFeature(type, mesh) {
+  mesh.userData.id = nextId;
   groundGroup.add(mesh);
-  roadFeatures.push({ id: nextFeatureId, type, params, mesh });
-  nextFeatureId++;
+  roadFeatures.push({ id:nextId, type, mesh });
+  nextId++;
   refreshFeatureList();
 }
 
@@ -302,7 +330,7 @@ window.deleteFeature = id => {
   }
 };
 
-function animate(){
+function animate() {
   requestAnimationFrame(animate);
   renderer.render(scene,camera);
 }
@@ -312,6 +340,7 @@ updateBtn.onclick = buildVehicle;
 
 </body>
 </html>
+
 
 
 
