@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8" />
-<title>Vehicle Geometry Viewer</title>
+<title>Vehicle + Ground Features (Explicit)</title>
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 
 <script type="importmap">
@@ -19,12 +19,16 @@
 body { margin:0; font-family:system-ui; background:#eaeaea; }
 #container { display:flex; height:100vh; }
 #ui {
-  width:300px; padding:10px; background:#fff;
-  border-right:1px solid #ccc; overflow-y:auto;
+  width:300px;
+  padding:10px;
+  background:#fff;
+  border-right:1px solid #ccc;
+  overflow-y:auto;
 }
 #viewer { flex:1; }
-h2,h3 { margin:6px 0; }
-button { width:100%; margin:4px 0; padding:6px; }
+
+h2,h3 { margin:8px 0; }
+button { width:100%; margin:6px 0; padding:6px; }
 .feature { font-size:11px; margin:4px 0; }
 </style>
 </head>
@@ -36,6 +40,7 @@ button { width:100%; margin:4px 0; padding:6px; }
   <h2>Road Features</h2>
   <button id="addBumpBtn">Add Speed Bump</button>
   <button id="addPotholeBtn">Add Pothole</button>
+
   <h3>Existing</h3>
   <div id="featureList"></div>
 </div>
@@ -49,9 +54,13 @@ import { OrbitControls } from
   'https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/controls/OrbitControls.js';
 
 let scene, camera, renderer, controls;
-let groundMesh, groundGeom;
+let vehicleGroup = new THREE.Group();
+let groundGroup = new THREE.Group();
 let features = [];
 let featureId = 1;
+
+const vehicleLength = 120;
+const vehicleWidth  = 72;
 
 init();
 animate();
@@ -78,17 +87,11 @@ function init() {
   d.position.set(200,-200,300);
   scene.add(d);
 
-  // Ground mesh (XY plane)
-  groundGeom = new THREE.PlaneGeometry(600,600,120,120);
-  groundGeom.rotateX(0); // stays in XY
+  scene.add(vehicleGroup);
+  scene.add(groundGroup);
 
-  const mat = new THREE.MeshStandardMaterial({
-    color:0xcccccc, side:THREE.DoubleSide
-  });
-
-  groundMesh = new THREE.Mesh(groundGeom, mat);
-  groundMesh.position.z = 0;
-  scene.add(groundMesh);
+  buildVehicle();
+  buildGround();
 
   window.addEventListener('resize',()=>{
     camera.aspect = viewer.clientWidth/viewer.clientHeight;
@@ -97,80 +100,126 @@ function init() {
   });
 }
 
-/* ---------- HEIGHT FIELD MODIFICATION ---------- */
-
-function applyFeature(fn) {
-  const pos = groundGeom.attributes.position;
-  for (let i=0;i<pos.count;i++) {
-    const x = pos.getX(i);
-    const y = pos.getY(i);
-    const z = fn(x,y);
-    pos.setZ(i, Math.max(pos.getZ(i), z));
-  }
-  pos.needsUpdate = true;
-  groundGeom.computeVertexNormals();
+/* ---------------- VEHICLE ---------------- */
+function buildVehicle() {
+  const body = new THREE.Mesh(
+    new THREE.BoxGeometry(vehicleWidth, vehicleLength, 24),
+    new THREE.MeshStandardMaterial({ color:0x555555 })
+  );
+  body.position.set(0, -vehicleLength/2, 12);
+  vehicleGroup.add(body);
 }
 
-/* ---------- SPEED BUMP ---------- */
-addBumpBtn.onclick = ()=>{
+/* ---------------- GROUND ---------------- */
+function buildGround() {
+  const ground = new THREE.Mesh(
+    new THREE.PlaneGeometry(600,600),
+    new THREE.MeshStandardMaterial({
+      color:0xcccccc,
+      side:THREE.DoubleSide
+    })
+  );
+  ground.position.z = 0;
+  groundGroup.add(ground);
+}
+
+/* ---------------- SPEED BUMP ---------------- */
+addBumpBtn.onclick = () => {
   Swal.fire({
     title:'Speed Bump',
     html:`
       <label>Height<input id="h" value="3"></label><br>
       <label>Length Y<input id="l" value="24"></label><br>
-      <label>Start Y<input id="y" value="60"></label>
+      <label>Start from front<input id="y" value="60"></label>
     `,
     preConfirm:()=>({h:+h.value,l:+l.value,y:+y.value})
   }).then(r=>r.value && addSpeedBump(r.value));
 };
 
 function addSpeedBump({h,l,y}) {
-  applyFeature((x,Y)=>{
-    if (Y<y || Y>y+l) return 0;
-    const t = (Y-y)/l;
-    return h*Math.sin(Math.PI*t);
-  });
-  addFeature(`Speed Bump @ ${y}`);
+  const geom = new THREE.CylinderGeometry(
+    l/2, l/2, vehicleWidth, 32, 1, true
+  );
+  const mat = new THREE.MeshStandardMaterial({ color:0x888888 });
+  const bump = new THREE.Mesh(geom, mat);
+
+  bump.rotation.x = Math.PI/2;   // make it a half-cylinder on ground
+  bump.rotation.z = Math.PI/2;
+
+  bump.position.set(
+    0,
+    -vehicleLength/2 + y + l/2,
+    h/2
+  );
+
+  groundGroup.add(bump);
+  registerFeature('Speed Bump', bump);
 }
 
-/* ---------- POTHOLE ---------- */
-addPotholeBtn.onclick = ()=>{
+/* ---------------- POTHOLE ---------------- */
+addPotholeBtn.onclick = () => {
   Swal.fire({
     title:'Pothole',
     html:`
       <label>Depth<input id="d" value="2"></label><br>
       <label>Length Y<input id="l" value="18"></label><br>
-      <label>Start Y<input id="y" value="48"></label>
+      <label>Start from front<input id="y" value="48"></label>
     `,
     preConfirm:()=>({d:+d.value,l:+l.value,y:+y.value})
   }).then(r=>r.value && addPothole(r.value));
 };
 
 function addPothole({d,l,y}) {
-  applyFeature((x,Y)=>{
-    if (Y<y || Y>y+l) return 0;
-    const t = Math.abs((Y-(y+l/2))/(l/2));
-    return -d*(1-t);
+  const shape = new THREE.Shape();
+  shape.moveTo(-l/2, 0);
+  shape.lineTo(0, -d);
+  shape.lineTo(l/2, 0);
+
+  const geom = new THREE.ExtrudeGeometry(shape, {
+    depth: 12,
+    bevelEnabled:false
   });
-  addFeature(`Pothole @ ${y}`);
+
+  const mat = new THREE.MeshStandardMaterial({ color:0x666666 });
+  const hole = new THREE.Mesh(geom, mat);
+
+  hole.rotation.x = Math.PI/2;
+  hole.position.set(
+    0,
+    -vehicleLength/2 + y + l/2,
+    0
+  );
+
+  groundGroup.add(hole);
+  registerFeature('Pothole', hole);
 }
 
-/* ---------- FEATURE LIST ---------- */
-function addFeature(label) {
+/* ---------------- FEATURE LIST ---------------- */
+function registerFeature(name, mesh) {
   const id = featureId++;
-  features.push({id,label});
+  features.push({ id, name, mesh });
   refreshList();
 }
 
 function refreshList() {
-  featureList.innerHTML='';
+  featureList.innerHTML = '';
   features.forEach(f=>{
-    const div=document.createElement('div');
-    div.className='feature';
-    div.textContent=f.label;
+    const div = document.createElement('div');
+    div.className = 'feature';
+    div.innerHTML = `${f.name}
+      <button onclick="removeFeature(${f.id})">Delete</button>`;
     featureList.appendChild(div);
   });
 }
+
+window.removeFeature = id => {
+  const i = features.findIndex(f=>f.id===id);
+  if (i>=0) {
+    groundGroup.remove(features[i].mesh);
+    features.splice(i,1);
+    refreshList();
+  }
+};
 
 function animate() {
   requestAnimationFrame(animate);
@@ -179,6 +228,7 @@ function animate() {
 </script>
 </body>
 </html>
+
 
 
 
