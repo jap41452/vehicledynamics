@@ -218,7 +218,7 @@ function addSpeedBump({h,w,y}) {
   //   shape.y  -> vertical      (vehicle Z)
   const shape = new THREE.Shape();
   shape.moveTo(-r, 0);
-  shape.absarc(0, 0, r, Math.PI, 0, false);
+  shape.absarc(0, 0, r, 0, Math.PI, false);
   shape.lineTo(r, 0);
 
   // Extrude depth becomes "old Z" axis; we will map old Z -> vehicle X
@@ -271,6 +271,7 @@ document.getElementById('updateBtn').onclick = buildVehicle;
 
 </body>
 </html>
+
 
 
 
