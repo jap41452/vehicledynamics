@@ -63,6 +63,22 @@
     <label>Rear Spacing <span class="units">in</span><input id="wheel_dYr" type="number" value="80"></label>
   </div>
 
+  <!-- >>> NEW SECTION -->
+  <h3>Suspension (Wheel → Body)</h3>
+  <div class="grid2">
+    <label>Front k <span class="units">lb/in</span><input id="k_sf" type="number" value="300"></label>
+    <label>Front c <span class="units">lb·s/in</span><input id="c_sf" type="number" value="25"></label>
+    <label>Rear k <span class="units">lb/in</span><input id="k_sr" type="number" value="350"></label>
+    <label>Rear c <span class="units">lb·s/in</span><input id="c_sr" type="number" value="30"></label>
+  </div>
+
+  <h3>Tires (Wheel → Ground)</h3>
+  <div class="grid2">
+    <label>Front k <span class="units">lb/in</span><input id="k_tf" type="number" value="1200"></label>
+    <label>Rear k <span class="units">lb/in</span><input id="k_tr" type="number" value="1400"></label>
+  </div>
+  <!-- >>> END NEW SECTION -->
+
   <button id="updateBtn">Update Vehicle</button>
 
   <h3>Road Features</h3>
@@ -77,6 +93,17 @@
 
 </div>
 
+<script type="module">
+/* ===== NO DYNAMICS CHANGES YET ===== */
+/* Everything below is unchanged from your working version */
+import * as THREE from 'three';
+import { OrbitControls } from 'https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/controls/OrbitControls.js';
+
+/* existing JS exactly as before … */
+</script>
+
+</body>
+</html>
 <script type="module">
 import * as THREE from 'three';
 import { OrbitControls } from 'https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/controls/OrbitControls.js';
@@ -295,6 +322,7 @@ updateBtn.onclick=buildVehicle;
 
 </body>
 </html>
+
 
 
 
