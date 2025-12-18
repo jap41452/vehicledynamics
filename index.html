@@ -67,11 +67,10 @@
 
   <h3>Road Features</h3>
   <button id="addBumpBtn">Add Speed Bump</button>
+  <button id="addHalfBumpBtn">Add 1/2 Speed Bump</button>
 
-  <!-- >>> ADDED -->
   <h3>Added Features</h3>
   <div id="featureList"></div>
-  <!-- >>> END ADDED -->
 </div>
 
 <div id="viewer"></div>
@@ -86,10 +85,7 @@ let scene, camera, renderer, controls;
 let vehicleGroup = new THREE.Group();
 let groundGroup = new THREE.Group();
 let roadFeatures = [];
-
-// >>> ADDED
 let nextFeatureId = 1;
-// >>> END ADDED
 
 init();
 buildVehicle();
@@ -123,12 +119,8 @@ function init() {
   scene.add(groundGroup);
 
   const groundPatch = new THREE.Mesh(
-    new THREE.PlaneGeometry(600,600,40,40),
-    new THREE.MeshStandardMaterial({
-      color:0xcccccc,
-      side:THREE.DoubleSide,
-      depthWrite:false
-    })
+    new THREE.PlaneGeometry(600,600),
+    new THREE.MeshStandardMaterial({color:0xcccccc,side:THREE.DoubleSide})
   );
   groundPatch.position.z = -0.5;
   groundGroup.add(groundPatch);
@@ -181,121 +173,129 @@ function buildVehicle(){
   controls.update();
 }
 
-/* ---------- SPEED BUMP UI ---------- */
+/* ---------- FULL SPEED BUMP ---------- */
 document.getElementById('addBumpBtn').onclick = ()=>{
   Swal.fire({
     title:'Add Speed Bump',
     html:`
-      <div style="text-align:left;font-size:12px;display:grid;grid-template-columns:1fr 1fr;gap:8px 10px">
-        <label>Height (in)<input id="bH" type="number" value="3" style="width:100%"></label>
-        <label>Width Y (in)<input id="bW" type="number" value="24" style="width:100%"></label>
-        <label style="grid-column:1 / span 2">Distance from front (in)
-          <input id="bY" type="number" value="60" style="width:100%">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+        <label>Height<input id="bH" type="number" value="3"></label>
+        <label>Width Y<input id="bW" type="number" value="24"></label>
+        <label style="grid-column:1/2">Distance from front
+          <input id="bY" type="number" value="60">
         </label>
       </div>
     `,
-    focusConfirm:false,
-    preConfirm:() => ({
-      h:+document.getElementById('bH').value,
-      w:+document.getElementById('bW').value,
-      y:+document.getElementById('bY').value
+    preConfirm:()=>({
+      h:+bH.value,w:+bW.value,y:+bY.value
     })
-  }).then(res=>{
-    if(res.value) addSpeedBump(res.value);
-  });
+  }).then(r=>r.value && addSpeedBump(r.value));
 };
 
 function addSpeedBump({h,w,y}) {
+  addBumpCore({h,w,y,side:null,half:false});
+}
+
+/* ---------- HALF SPEED BUMP ---------- */
+document.getElementById('addHalfBumpBtn').onclick = ()=>{
+  Swal.fire({
+    title:'Add 1/2 Speed Bump',
+    html:`
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+        <label>Height<input id="bH" type="number" value="3"></label>
+        <label>Width Y<input id="bW" type="number" value="24"></label>
+        <label>Side
+          <select id="bSide">
+            <option value="left">Left</option>
+            <option value="right">Right</option>
+          </select>
+        </label>
+        <label style="grid-column:1/2">Distance from front
+          <input id="bY" type="number" value="60">
+        </label>
+      </div>
+    `,
+    preConfirm:()=>({
+      h:+bH.value,w:+bW.value,y:+bY.value,side:bSide.value
+    })
+  }).then(r=>r.value && addBumpCore({...r.value,half:true}));
+};
+
+function addBumpCore({h,w,y,side,half}) {
   const L = +box1_L.value;
   const W = +box1_W.value;
-  const r = Math.max(1e-6, w/2);
+  const r = w/2;
 
   const shape = new THREE.Shape();
-  shape.moveTo(-r, 0);
-  shape.absarc(0, 0, r, 0, Math.PI, false);
-  shape.lineTo(r, 0);
+  shape.moveTo(-r,0);
+  shape.absarc(0,0,r,0,Math.PI,false);
+  shape.lineTo(r,0);
 
-  const geom = new THREE.ExtrudeGeometry(shape, {
-    depth: W,
-    bevelEnabled: false,
-    steps: 1
-  });
+  const depth = half ? W/2 : W;
 
-  geom.scale(1, h / r, 1);
-  geom.translate(0, 0, -W/2);
+  const geom = new THREE.ExtrudeGeometry(shape,{depth,bevelEnabled:false});
+  geom.scale(1,h/r,1);
+  geom.translate(0,0,-depth/2);
 
   const P = new THREE.Matrix4().set(
-    0, 0, 1, 0,
-    1, 0, 0, 0,
-    0, 1, 0, 0,
-    0, 0, 0, 1
+    0,0,1,0,
+    1,0,0,0,
+    0,1,0,0,
+    0,0,0,1
   );
   geom.applyMatrix4(P);
+  geom.translate(0,y+L/2,0);
 
-  const yLocal = y + L/2;
-  geom.translate(0, yLocal, 0);
+  const bump = new THREE.Mesh(geom,new THREE.MeshStandardMaterial({color:0x888888}));
 
-  const bump = new THREE.Mesh(
-    geom,
-    new THREE.MeshStandardMaterial({ color: 0x888888 })
-  );
+  if(half){
+    bump.position.x += (side==='left'?-1:1)*(W/4);
+  }
 
   groundGroup.add(bump);
 
-  // >>> ADDED
   roadFeatures.push({
     id: nextFeatureId++,
-    type: 'bump',
-    params: { h, w, y },
-    mesh: bump
+    type: half ? 'half-bump':'bump',
+    params:{h,w,y,side},
+    mesh:bump
   });
+
   refreshFeatureList();
-  // >>> END ADDED
 }
 
-// >>> ADDED
-function refreshFeatureList() {
-  const list = document.getElementById('featureList');
-  list.innerHTML = '';
-
-  roadFeatures.forEach(f => {
-    const row = document.createElement('div');
-    row.style.fontSize = '11px';
-    row.style.marginBottom = '4px';
-
-    row.innerHTML = `
-      Speed Bump @ ${f.params.y} in
-      <button data-id="${f.id}" style="margin-left:6px;font-size:10px">Delete</button>
-    `;
-    list.appendChild(row);
+/* ---------- FEATURE LIST ---------- */
+function refreshFeatureList(){
+  featureList.innerHTML='';
+  roadFeatures.forEach(f=>{
+    const d=document.createElement('div');
+    d.style.fontSize='11px';
+    d.innerHTML=`
+      ${f.type==='half-bump'?'½ Speed Bump ('+f.params.side+')':'Speed Bump'} @ ${f.params.y} in
+      <button data-id="${f.id}" style="font-size:10px">Delete</button>`;
+    featureList.appendChild(d);
   });
 }
 
-document.getElementById('featureList').onclick = (e) => {
-  if (e.target.tagName !== 'BUTTON') return;
-  deleteFeature(Number(e.target.dataset.id));
-};
-
-function deleteFeature(id) {
-  const i = roadFeatures.findIndex(f => f.id === id);
-  if (i < 0) return;
-
+featureList.onclick=e=>{
+  if(e.target.tagName!=='BUTTON')return;
+  const i=roadFeatures.findIndex(f=>f.id==e.target.dataset.id);
   groundGroup.remove(roadFeatures[i].mesh);
-  roadFeatures.splice(i, 1);
+  roadFeatures.splice(i,1);
   refreshFeatureList();
-}
-// >>> END ADDED
+};
 
 function animate(){
   requestAnimationFrame(animate);
   renderer.render(scene,camera);
 }
 
-document.getElementById('updateBtn').onclick = buildVehicle;
+updateBtn.onclick=buildVehicle;
 </script>
 
 </body>
 </html>
+
 
 
 
