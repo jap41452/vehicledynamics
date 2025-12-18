@@ -67,6 +67,11 @@
 
   <h3>Road Features</h3>
   <button id="addBumpBtn">Add Speed Bump</button>
+
+  <!-- >>> ADDED -->
+  <h3>Added Features</h3>
+  <div id="featureList"></div>
+  <!-- >>> END ADDED -->
 </div>
 
 <div id="viewer"></div>
@@ -81,6 +86,10 @@ let scene, camera, renderer, controls;
 let vehicleGroup = new THREE.Group();
 let groundGroup = new THREE.Group();
 let roadFeatures = [];
+
+// >>> ADDED
+let nextFeatureId = 1;
+// >>> END ADDED
 
 init();
 buildVehicle();
@@ -113,7 +122,6 @@ function init() {
   scene.add(vehicleGroup);
   scene.add(groundGroup);
 
-  // Local ground patch (XY plane)
   const groundPatch = new THREE.Mesh(
     new THREE.PlaneGeometry(600,600,40,40),
     new THREE.MeshStandardMaterial({
@@ -168,10 +176,7 @@ function buildVehicle(){
     vehicleGroup.add(w);
   });
 
-  // Ground patch follows vehicle position (no rotation)
   groundGroup.position.set(0,-L/2,0);
-
-  // Orbit target (temp; will become CG)
   controls.target.set(0,-L/2,H);
   controls.update();
 }
@@ -190,7 +195,7 @@ document.getElementById('addBumpBtn').onclick = ()=>{
       </div>
     `,
     focusConfirm:false,
-    preConfirm:()=>({
+    preConfirm:() => ({
       h:+document.getElementById('bH').value,
       w:+document.getElementById('bW').value,
       y:+document.getElementById('bY').value
@@ -200,43 +205,25 @@ document.getElementById('addBumpBtn').onclick = ()=>{
   });
 };
 
-/*
-Speed bump definition:
-- Cross-section is semicircle in (Y,Z)
-- Extruded across X for full road width
-- Positioned by distance from vehicle front face (world y=0)
-*/
 function addSpeedBump({h,w,y}) {
   const L = +box1_L.value;
   const W = +box1_W.value;
-
-  // Radius based on requested width along Y
   const r = Math.max(1e-6, w/2);
 
-  // Build 2D shape in "shape XY":
-  //   shape.x  -> longitudinal (vehicle Y)
-  //   shape.y  -> vertical      (vehicle Z)
   const shape = new THREE.Shape();
   shape.moveTo(-r, 0);
   shape.absarc(0, 0, r, 0, Math.PI, false);
   shape.lineTo(r, 0);
 
-  // Extrude depth becomes "old Z" axis; we will map old Z -> vehicle X
   const geom = new THREE.ExtrudeGeometry(shape, {
     depth: W,
     bevelEnabled: false,
     steps: 1
   });
 
-  // Scale vertical to achieve requested height h (semicircle peak = r by default)
   geom.scale(1, h / r, 1);
-
-  // Center the extrusion about X=0 by shifting old Z to [-W/2, +W/2]
   geom.translate(0, 0, -W/2);
 
-  // Map axes explicitly:
-  // old coords: (x,y,z) = (Y_long, Z_vert, X_extrude)
-  // want:       (Xv,Yv,Zv) = (X_extrude, Y_long, Z_vert) = (z, x, y)
   const P = new THREE.Matrix4().set(
     0, 0, 1, 0,
     1, 0, 0, 0,
@@ -245,11 +232,7 @@ function addSpeedBump({h,w,y}) {
   );
   geom.applyMatrix4(P);
 
-  // Place bump by distance from front face (front face is at world y=0).
-  // groundGroup origin is at world y = -L/2, so local y must be y + L/2.
   const yLocal = y + L/2;
-
-  // Move the bump to that location (already centered in X and sitting on Z=0)
   geom.translate(0, yLocal, 0);
 
   const bump = new THREE.Mesh(
@@ -258,8 +241,50 @@ function addSpeedBump({h,w,y}) {
   );
 
   groundGroup.add(bump);
-  roadFeatures.push({ type:'bump', params:{h,w,y}, mesh:bump });
+
+  // >>> ADDED
+  roadFeatures.push({
+    id: nextFeatureId++,
+    type: 'bump',
+    params: { h, w, y },
+    mesh: bump
+  });
+  refreshFeatureList();
+  // >>> END ADDED
 }
+
+// >>> ADDED
+function refreshFeatureList() {
+  const list = document.getElementById('featureList');
+  list.innerHTML = '';
+
+  roadFeatures.forEach(f => {
+    const row = document.createElement('div');
+    row.style.fontSize = '11px';
+    row.style.marginBottom = '4px';
+
+    row.innerHTML = `
+      Speed Bump @ ${f.params.y} in
+      <button data-id="${f.id}" style="margin-left:6px;font-size:10px">Delete</button>
+    `;
+    list.appendChild(row);
+  });
+}
+
+document.getElementById('featureList').onclick = (e) => {
+  if (e.target.tagName !== 'BUTTON') return;
+  deleteFeature(Number(e.target.dataset.id));
+};
+
+function deleteFeature(id) {
+  const i = roadFeatures.findIndex(f => f.id === id);
+  if (i < 0) return;
+
+  groundGroup.remove(roadFeatures[i].mesh);
+  roadFeatures.splice(i, 1);
+  refreshFeatureList();
+}
+// >>> END ADDED
 
 function animate(){
   requestAnimationFrame(animate);
@@ -271,6 +296,7 @@ document.getElementById('updateBtn').onclick = buildVehicle;
 
 </body>
 </html>
+
 
 
 
