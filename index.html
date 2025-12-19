@@ -89,6 +89,17 @@
     <label>Rear k <span class="units">lb/in</span><input id="k_tr" type="number" value="1400"></label>
   </div>
 
+<h3>Simulation Controls</h3>
+<div class="grid2">
+  <label>Speed v <span class="units">in/s</span>
+    <input id="veh_v" type="number" value="120">
+  </label>
+  <label>Gravity g <span class="units">in/s²</span>
+    <input id="veh_g" type="number" value="386.09">
+  </label>
+</div>
+
+
   <h3>Mass Properties (Boxes 1+2)</h3>
   <div class="readout">
     <div class="row"><span><b>M</b> (lb·s²/in)</span><span id="mp_M">—</span></div>
@@ -231,6 +242,33 @@ function buildVehicle(){
     box2: {L:L2, W:W2, H:H2, Wt:+box2_Wt.value, r: box2.position}
   });
 }
+
+function computeWheelOffsetsFromCG() {
+  if (!window.massProps) return;
+
+  const { CG } = window.massProps;
+
+  const W = +box1_W.value;
+  const yF = +wheel_Yf.value;
+  const yR = yF - +wheel_dYr.value;
+
+  const wheels = [
+    { name:'FL', x:-W/2, y:yF },
+    { name:'FR', x: W/2, y:yF },
+    { name:'RL', x:-W/2, y:yR },
+    { name:'RR', x: W/2, y:yR }
+  ];
+
+  window.wheelOffsets = wheels.map(w => ({
+    name: w.name,
+    x: w.x - CG.x,
+    y: w.y - CG.y
+  }));
+
+  console.table(window.wheelOffsets);
+}
+
+computeWheelOffsetsFromCG();
 
 /* ---------- MASS PROPERTIES (boxes only) ---------- */
 function computeAndDisplayMassProps({box1, box2}) {
@@ -452,6 +490,48 @@ function addHalfSpeedBump({h,w,y,side}) {
   refreshFeatureList();
 }
 
+function roadHeightAt(x, y) {
+  let z = 0;
+
+  for (const f of roadFeatures) {
+    if (f.type === 'bump') {
+      z = Math.max(z, evalFullBump(f.params, x, y));
+    }
+    if (f.type === 'half-bump') {
+      z = Math.max(z, evalHalfBump(f.params, x, y));
+    }
+  }
+  return z;
+}
+
+
+function evalFullBump({ h, w, y }, x, yq) {
+  const r = w / 2;
+  const dy = yq - y;
+
+  if (Math.abs(dy) > r) return 0;
+
+  // Semicircle profile
+  return h * Math.sqrt(1 - (dy*dy)/(r*r));
+}
+
+
+function evalHalfBump({ h, w, y, side }, x, yq) {
+  const r = w / 2;
+  const dy = yq - y;
+
+  if (Math.abs(dy) > r) return 0;
+
+  // Lateral filtering
+  if (side === 'left'  && x > 0) return 0;
+  if (side === 'right' && x < 0) return 0;
+
+  return h * Math.sqrt(1 - (dy*dy)/(r*r));
+}
+
+const yWheel = wheelOffsets[i].y + v * t;
+const zRoad  = roadHeightAt(wheelOffsets[i].x, yWheel);
+
 /* ---------- FEATURE LIST ---------- */
 function refreshFeatureList() {
   const list = document.getElementById('featureList');
@@ -499,6 +579,8 @@ document.getElementById('updateBtn').onclick = buildVehicle;
 
 </body>
 </html>
+
+
 
 
 
