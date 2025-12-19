@@ -569,6 +569,512 @@ function deleteFeature(id) {
   refreshFeatureList();
 }
 
+function bodyDZatWheel(state, wheelName) {
+  const w = window.wheelOffsets.find(o => o.name === wheelName);
+  if (!w) throw new Error(`Unknown wheel: ${wheelName}`);
+
+  return (
+    state.dz
+    - state.dphi   * w.x	
+    + state.dtheta * w.y
+  );
+}
+
+state.z = 10;
+state.phi = 0;
+state.theta = 0;
+
+bodyZatWheel(state,'FL') === 10
+bodyZatWheel(state,'RR') === 10
+
+
+state.phi = 0.05;   // rad
+state.theta = 0;
+
+bodyZatWheel(state,'FR') < bodyZatWheel(state,'FL');
+
+
+state.theta = 0.05;
+state.phi = 0;
+
+bodyZatWheel(state,'FL') > bodyZatWheel(state,'RL');
+
+function tireStateAtWheel(state, wheelName) {
+  const w = window.wheelOffsets.find(o => o.name === wheelName);
+  if (!w) throw new Error(`Unknown wheel: ${wheelName}`);
+
+  const zw = state.zw[wheelName];
+  const zRoad = roadHeightAt(w.x, w.y);
+
+  const deflection = zw - zRoad;
+
+  // Tire stiffness selection
+  const isFront = (wheelName === 'FL' || wheelName === 'FR');
+  const kt = isFront ? +k_tf.value : +k_tr.value;
+
+  const inContact = deflection > 0;
+  const force = inContact ? kt * deflection : 0;
+
+  return {
+    zw,
+    zRoad,
+    deflection,
+    inContact,
+    force
+  };
+}
+
+
+
+function computeAllTireForces(state) {
+  const out = {};
+  let FzTotal = 0;
+
+  ['FL','FR','RL','RR'].forEach(name => {
+    const t = tireStateAtWheel(state, name);
+    out[name] = t;
+    FzTotal += t.force;
+  });
+
+  out.FzTotal = FzTotal;
+  return out;
+}
+
+
+state.zw = { FL:0, FR:0, RL:0, RR:0 };
+
+console.table(computeAllTireForces(state));
+
+state.zw.FL = -1;
+
+
+function suspensionStateAtWheel(state, wheelName) {
+  const w = window.wheelOffsets.find(o => o.name === wheelName);
+  if (!w) throw new Error(`Unknown wheel: ${wheelName}`);
+
+  // Body kinematics at wheel
+  const zb  = bodyZatWheel(state, wheelName);
+  const dzb = bodyDZatWheel(state, wheelName);
+
+  // Wheel kinematics
+  const zw  = state.zw[wheelName];
+  const dzw = state.dzw[wheelName];
+
+  // Deflection & rate
+  const deflection = zb - zw;
+  const ddeflection = dzb - dzw;
+
+  // Front / rear selection
+  const isFront = (wheelName === 'FL' || wheelName === 'FR');
+  const ks = isFront ? +k_sf.value : +k_sr.value;
+  const cs = isFront ? +c_sf.value : +c_sr.value;
+
+  const force = ks * deflection + cs * ddeflection;
+
+  return {
+    zb, dzb,
+    zw, dzw,
+    deflection,
+    ddeflection,
+    force
+  };
+}
+
+
+function computeAllSuspensionForces(state) {
+  const out = {};
+  let FzBody = 0;
+  let Mx = 0;
+  let My = 0;
+
+  ['FL','FR','RL','RR'].forEach(name => {
+    const s = suspensionStateAtWheel(state, name);
+    out[name] = s;
+
+    const w = window.wheelOffsets.find(o => o.name === name);
+
+    // Body force & moments
+    FzBody += s.force;
+    Mx += -s.force * w.x; // roll moment
+    My +=  s.force * w.y; // pitch moment
+  });
+
+  out.FzBody = FzBody;
+  out.Mx = Mx;
+  out.My = My;
+
+  return out;
+}
+
+
+
+function computeAllSuspensionForces(state) {
+  const out = {};
+  let FzBody = 0;
+  let Mx = 0;
+  let My = 0;
+
+  ['FL','FR','RL','RR'].forEach(name => {
+    const s = suspensionStateAtWheel(state, name);
+    out[name] = s;
+
+    const w = window.wheelOffsets.find(o => o.name === name);
+
+    // Body force & moments
+    FzBody += s.force;
+    Mx += -s.force * w.x; // roll moment
+    My +=  s.force * w.y; // pitch moment
+  });
+
+  out.FzBody = FzBody;
+  out.Mx = Mx;
+  out.My = My;
+
+  return out;
+}
+
+
+function computeAllForcesSnapshot(state) {
+  return {
+    tire: computeAllTireForces(state),
+    suspension: computeAllSuspensionForces(state)
+  };
+}
+
+state.z = 10;
+state.phi = 0;
+state.theta = 0;
+
+state.zw = { FL:9, FR:9, RL:9, RR:9 };
+state.dzw = { FL:0, FR:0, RL:0, RR:0 };
+
+console.table(computeAllForcesSnapshot(state));
+
+
+function computeEOMAccelerations(state) {
+  if (!window.massProps) throw new Error('massProps not defined yet (buildVehicle must run).');
+  if (!window.wheelOffsets) throw new Error('wheelOffsets not defined yet (computeWheelOffsets must run).');
+
+  const g = +veh_g.value;                 // in/s^2
+  const M = window.massProps.M;           // lb*s^2/in (slugs-in units)
+  const Ixx = window.massProps.I.Ixx;     // consistent with your massProps store
+  const Iyy = window.massProps.I.Iyy;
+
+  // wheel mass (each) from UI (lb -> lb*s^2/in)
+  const mw = (+wheel_Wt.value) / g;
+
+  // Per-corner forces
+  const names = ['FL','FR','RL','RR'];
+
+  let sumFzBody = 0;   // total vertical force on body (excluding weight)
+  let sumTy = 0;       // torque about +Y on body
+  let sumTx = 0;       // torque about +X on body
+
+  const ddzw = { FL:0, FR:0, RL:0, RR:0 };
+  const dbg = {}; // optional debug packet per wheel
+
+  for (const name of names) {
+    const w = window.wheelOffsets.find(o => o.name === name);
+    if (!w) throw new Error(`wheelOffsets missing ${name}`);
+
+    // Tire (up on wheel)
+    const t = tireStateAtWheel(state, name);
+    const Ft = t.force;
+
+    // Suspension (force on wheel in +Z)
+    const s = suspensionStateAtWheel(state, name);
+    const Fs_wheel = s.force;
+
+    // Body gets opposite (force on body in +Z)
+    const Fbody = -Fs_wheel;
+
+    // Accumulate body force and torques (about CG)
+    sumFzBody += Fbody;
+
+    // Using r=(x,y,0), F=(0,0,Fbody): tau = r x F = (yF, -xF, 0)
+    sumTx += w.y * Fbody;       // about +X (your theta)
+    sumTy += (-w.x) * Fbody;    // about +Y (your phi)
+
+    // Wheel vertical acceleration
+    ddzw[name] = (Fs_wheel + Ft - mw * g) / mw;
+
+    dbg[name] = {
+      x: w.x, y: w.y,
+      Ft, Fs_wheel,
+      inContact: t.inContact,
+      zRoad: t.zRoad,
+      tireDefl: t.deflection,
+      suspDefl: s.deflection
+    };
+  }
+
+  // Body accelerations
+  const ddz = (sumFzBody - M * g) / M;
+  const ddphi = (sumTy) / Iyy;     // phi about +Y
+  const ddtheta = (sumTx) / Ixx;   // theta about +X
+
+  return {
+    body: { ddz, ddphi, ddtheta },
+    wheels: { ddzw },
+    sums: { sumFzBody, sumTx, sumTy },
+    dbg
+  };
+}
+
+
+// Example initial state (pick reasonable starting values)
+const state = {
+  z: 10, phi: 0, theta: 0,
+  dz: 0, dphi: 0, dtheta: 0,
+  zw: { FL: 0, FR: 0, RL: 0, RR: 0 },
+  dzw: { FL: 0, FR: 0, RL: 0, RR: 0 }
+};
+
+console.log(computeEOMAccelerations(state));
+
+function wheelXYForRoad(name) {
+  const w = window.wheelOffsets.find(o => o.name === name);
+  const CG = window.massProps?.CG || {x:0, y:0};
+
+  // absolute vehicle-frame coordinates used by road features
+  return {
+    x: w.x + CG.x,
+    y: w.y + CG.y
+  };
+}
+
+const {x,y} = wheelXYForRoad('FL');
+const zRoad = roadHeightAt(x,y);
+
+
+
+function initStaticEquilibrium(state) {
+  if (!window.massProps || !window.wheelOffsets) {
+    throw new Error('Run buildVehicle() first so massProps and wheelOffsets exist.');
+  }
+
+  const g = +veh_g.value;
+  const M = window.massProps.M;
+
+  // each wheel mass from UI wheel weight
+  const mw = (+wheel_Wt.value) / g;
+
+  const names = ['FL','FR','RL','RR'];
+
+  // Contact flags (iterate)
+  const contact = { FL:true, FR:true, RL:true, RR:true };
+
+  // Helper: front/rear stiffness
+  function ksOf(name){
+    const isFront = (name === 'FL' || name === 'FR');
+    return isFront ? +k_sf.value : +k_sr.value;
+  }
+  function ktOf(name){
+    const isFront = (name === 'FL' || name === 'FR');
+    return isFront ? +k_tf.value : +k_tr.value;
+  }
+
+  // Build & solve 3x3 for [z, phi, theta]
+  function solveBodyForContactSet() {
+    // We assemble equations in the form:
+    // A * [z, phi, theta]^T = b
+    //
+    // Using z_bi = z - phi*x_i + theta*y_i
+    //
+    // For a contacting wheel:
+    // Fs_i = K_eff_i * z_bi - C_i
+    // where K_eff_i = ks*kt/(kt-ks)
+    // and C_i = ks*(mw*g + kt*zRoad)/(kt-ks)
+    //
+    // For a lifted wheel:
+    // Fs_i = mw*g  (constant), and does not depend on z_bi.
+
+    let A00=0, A01=0, A02=0, b0=0; // force equilibrium
+    let A10=0, A11=0, A12=0, b1=0; // pitch moment equilibrium (about +X) using y
+    let A20=0, A21=0, A22=0, b2=0; // roll moment equilibrium (about +Y) using x
+
+    // Body equations are:
+    // sum(-Fs_i) - M g = 0
+    // sum( y_i * (-Fs_i) ) = 0
+    // sum( (-x_i) * (-Fs_i) ) = 0
+    //
+    // i.e. -sum(Fs_i) = M g
+
+    for (const name of names) {
+      const w = window.wheelOffsets.find(o => o.name === name);
+      const ks = ksOf(name);
+
+      // road height at that wheel location
+      const xy = wheelXYForRoad(name);
+      const zRoad = roadHeightAt(xy.x, xy.y);
+
+      if (contact[name]) {
+        const kt = ktOf(name);
+
+        // guard: if kt == ks, effective expressions blow up
+        const denom = (kt - ks);
+        if (Math.abs(denom) < 1e-9) throw new Error('kt and ks too close; choose kt > ks.');
+
+        const Keff = ks * kt / denom;
+        const C = ks * (mw*g + kt*zRoad) / denom;
+
+        // Fs = Keff*(z - phi*x + theta*y) - C
+
+        // Contribution to -Fs in force equation:
+        // -Fs = -(Keff*z) + (Keff*x)*phi - (Keff*y)*theta + C
+        A00 += -Keff;
+        A01 +=  Keff * w.x;
+        A02 += -Keff * w.y;
+        b0  +=  C;
+
+        // Pitch moment about +X: sum(y * (-Fs)) = 0
+        A10 += (-Keff) * w.y;
+        A11 += ( Keff * w.x) * w.y;
+        A12 += (-Keff * w.y) * w.y;
+        b1  += C * w.y;
+
+        // Roll moment about +Y: sum((-x) * (-Fs)) = 0
+        A20 += (-Keff) * (-w.x);
+        A21 += ( Keff * w.x) * (-w.x);
+        A22 += (-Keff * w.y) * (-w.x);
+        b2  += C * (-w.x);
+
+      } else {
+        // lifted: Fs = mw*g constant (from wheel equilibrium with Ft=0)
+        // so -Fs contributes constant: -mw*g
+        // thus b accumulates that constant on RHS
+        b0 += -mw*g;
+
+        b1 += (-mw*g) * w.y;
+        b2 += (-mw*g) * (-w.x);
+      }
+    }
+
+    // Now apply the weight term: force equilibrium is sum(-Fs) - M g = 0
+    // Our assembled b0 currently is sum(constants in -Fs); move M g to RHS:
+    // A*[z,phi,theta] = (M g) - b0_constants?  Careful:
+    // We assembled A and b such that:
+    // (A00*z + A01*phi + A02*theta) + b0 = M g
+    // => A00*z + A01*phi + A02*theta = M g - b0
+    const rhs0 = M*g - b0;
+    const rhs1 = -b1;  // moments equation: sum(y*(-Fs)) = 0 => A*vars + b = 0 => A*vars = -b
+    const rhs2 = -b2;
+
+    const sol = solve3x3(
+      [[A00,A01,A02],[A10,A11,A12],[A20,A21,A22]],
+      [rhs0,rhs1,rhs2]
+    );
+
+    return { z: sol[0], phi: sol[1], theta: sol[2] };
+  }
+
+  // Given z,phi,theta compute wheel zw from equilibrium
+  function computeWheelsGivenBody(z,phi,theta) {
+    const zw = {};
+    const tireDefl = {};
+    const inContact = {};
+
+    for (const name of names) {
+      const w = window.wheelOffsets.find(o => o.name === name);
+      const ks = ksOf(name);
+      const kt = ktOf(name);
+
+      const zb = z - phi*w.x + theta*w.y;
+
+      const xy = wheelXYForRoad(name);
+      const zRoad = roadHeightAt(xy.x, xy.y);
+
+      if (contact[name]) {
+        // Contact assumed: solve wheel equilibrium analytically
+        // ks(zb-zw) + kt(zw-zRoad) - mw*g = 0
+        // => zw = (mw*g + kt*zRoad - ks*zb)/(kt-ks)
+        const denom = (kt - ks);
+        zw[name] = (mw*g + kt*zRoad - ks*zb) / denom;
+      } else {
+        // Lifted: Ft=0 -> ks(zb-zw) - mw*g = 0 => zw = zb - mw*g/ks
+        zw[name] = zb - (mw*g)/ks;
+      }
+
+      const defl = zw[name] - zRoad;
+      tireDefl[name] = defl;
+      inContact[name] = defl > 0;
+    }
+
+    return { zw, tireDefl, inContact };
+  }
+
+  // Iterate contact set
+  for (let iter=0; iter<8; iter++) {
+    const { z, phi, theta } = solveBodyForContactSet();
+    const { zw, inContact } = computeWheelsGivenBody(z,phi,theta);
+
+    // Update contact flags
+    let changed = false;
+    for (const name of names) {
+      const newC = inContact[name];
+      if (newC !== contact[name]) { contact[name] = newC; changed = true; }
+    }
+
+    // If stable, finalize state
+    if (!changed) {
+      state.z = z; state.phi = phi; state.theta = theta;
+      state.dz = 0; state.dphi = 0; state.dtheta = 0;
+      state.zw = zw;
+      state.dzw = { FL:0, FR:0, RL:0, RR:0 };
+      state.contact = {...contact}; // optional
+      return state;
+    }
+  }
+
+  throw new Error('Static equilibrium did not converge (check stiffness values / road geometry).');
+}
+
+/* ---- tiny 3x3 solver (Gaussian elimination) ---- */
+function solve3x3(A, b) {
+  // Copy
+  const m = A.map(r => r.slice());
+  const x = b.slice();
+
+  for (let k=0; k<3; k++) {
+    // pivot
+    let p = k;
+    for (let i=k+1; i<3; i++) if (Math.abs(m[i][k]) > Math.abs(m[p][k])) p = i;
+    if (Math.abs(m[p][k]) < 1e-12) throw new Error('Singular 3x3 system in static equilibrium.');
+
+    // swap
+    if (p !== k) { [m[p], m[k]] = [m[k], m[p]]; [x[p], x[k]] = [x[k], x[p]]; }
+
+    // eliminate
+    for (let i=k+1; i<3; i++) {
+      const f = m[i][k]/m[k][k];
+      for (let j=k; j<3; j++) m[i][j] -= f*m[k][j];
+      x[i] -= f*x[k];
+    }
+  }
+
+  // back-sub
+  const sol = [0,0,0];
+  for (let i=2; i>=0; i--) {
+    let s = x[i];
+    for (let j=i+1; j<3; j++) s -= m[i][j]*sol[j];
+    sol[i] = s/m[i][i];
+  }
+  return sol;
+}
+
+
+const state = {
+  z: 0, phi: 0, theta: 0,
+  dz: 0, dphi: 0, dtheta: 0,
+  zw: { FL:0, FR:0, RL:0, RR:0 },
+  dzw:{ FL:0, FR:0, RL:0, RR:0 }
+};
+
+initStaticEquilibrium(state);
+console.log(state);
+
+
+
 function animate(){
   requestAnimationFrame(animate);
   renderer.render(scene,camera);
@@ -579,6 +1085,7 @@ document.getElementById('updateBtn').onclick = buildVehicle;
 
 </body>
 </html>
+
 
 
 
