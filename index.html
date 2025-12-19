@@ -242,6 +242,8 @@ function buildVehicle(){
     box2: {L:L2, W:W2, H:H2, Wt:+box2_Wt.value, r: box2.position}
   });
 }
+computeWheelOffsetsFromCG();
+
 
 function computeWheelOffsetsFromCG() {
   if (!window.massProps) return;
@@ -268,7 +270,6 @@ function computeWheelOffsetsFromCG() {
   console.table(window.wheelOffsets);
 }
 
-computeWheelOffsetsFromCG();
 
 /* ---------- MASS PROPERTIES (boxes only) ---------- */
 function computeAndDisplayMassProps({box1, box2}) {
@@ -529,8 +530,8 @@ function evalHalfBump({ h, w, y, side }, x, yq) {
   return h * Math.sqrt(1 - (dy*dy)/(r*r));
 }
 
-const yWheel = wheelOffsets[i].y + v * t;
-const zRoad  = roadHeightAt(wheelOffsets[i].x, yWheel);
+//const yWheel = wheelOffsets[i].y + v * t;
+//const zRoad  = roadHeightAt(wheelOffsets[i].x, yWheel);
 
 /* ---------- FEATURE LIST ---------- */
 function refreshFeatureList() {
@@ -584,9 +585,8 @@ state.z = 10;
 state.phi = 0;
 state.theta = 0;
 
-bodyZatWheel(state,'FL') === 10
-bodyZatWheel(state,'RR') === 10
-
+//bodyZatWheel(state,'FL') === 10
+//bodyZatWheel(state,'RR') === 10
 
 state.phi = 0.05;   // rad
 state.theta = 0;
@@ -678,32 +678,6 @@ function suspensionStateAtWheel(state, wheelName) {
     ddeflection,
     force
   };
-}
-
-
-function computeAllSuspensionForces(state) {
-  const out = {};
-  let FzBody = 0;
-  let Mx = 0;
-  let My = 0;
-
-  ['FL','FR','RL','RR'].forEach(name => {
-    const s = suspensionStateAtWheel(state, name);
-    out[name] = s;
-
-    const w = window.wheelOffsets.find(o => o.name === name);
-
-    // Body force & moments
-    FzBody += s.force;
-    Mx += -s.force * w.x; // roll moment
-    My +=  s.force * w.y; // pitch moment
-  });
-
-  out.FzBody = FzBody;
-  out.Mx = Mx;
-  out.My = My;
-
-  return out;
 }
 
 
@@ -1085,6 +1059,7 @@ document.getElementById('updateBtn').onclick = buildVehicle;
 
 </body>
 </html>
+
 
 
 
