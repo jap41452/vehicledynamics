@@ -1,227 +1,1047 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <title>Vehicle Dynamics Module</title>
-    <style>
-        body { margin: 0; overflow: hidden; }
-        #info {
-            position: absolute; top: 10px; left: 10px; color: white; 
-            font-family: monospace; background: rgba(0,0,0,0.5); padding: 10px;
-        }
-    </style>
+<meta charset="UTF-8" />
+<title>Vehicle Geometry Viewer</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js"
+  }
+}
+</script>
+
+<script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+
+<style>
+  body { margin:0; font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif; background:#eaeaea; }
+  #container { display:flex; height:100vh; }
+  #ui { width:300px; padding:10px; background:#fff; border-right:1px solid #ccc; box-sizing:border-box; overflow-y:auto; }
+  #viewer { flex:1; position:relative; }
+
+  h2{font-size:14px;margin:0 0 8px 0;}
+  h3{font-size:12px;margin:10px 0 4px 0;border-bottom:1px solid #ddd;}
+
+  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:6px 8px;}
+  label{font-size:11px;}
+  input[type="number"]{width:100%;padding:4px;font-size:11px;box-sizing:border-box;}
+  .units{float:right;font-size:10px;color:#777;}
+  button{width:100%;margin-top:8px;padding:6px;font-size:12px;cursor:pointer;}
+
+  .readout {
+    font-size: 11px;
+    line-height: 1.35;
+    padding: 6px 6px;
+    background: #fafafa;
+    border: 1px solid #e3e3e3;
+    border-radius: 6px;
+  }
+  .readout b { font-weight: 600; }
+  .readout .row { display:flex; justify-content:space-between; gap:10px; }
+  .readout .row span { white-space:nowrap; }
+</style>
 </head>
+
 <body>
-    <div id="info">
-        <b>Vehicle Dynamics Module</b><br>
-        WASD to Drive<br>
-        Space to Brake
-    </div>
+<div id="container">
 
-    <script type="importmap">
-        {
-            "imports": {
-                "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
-                "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/",
-                "cannon-es": "https://unpkg.com/cannon-es@0.20.0/dist/cannon-es.js"
-            }
-        }
-    </script>
+<div id="ui">
+  <h2>Vehicle Geometry</h2>
 
-    <script type="module">
-        import * as THREE from 'three';
-        import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
-        import * as CANNON from 'cannon-es';
+  <h3>Box 1</h3>
+  <div class="grid2">
+    <label>Length (Y) <span class="units">in</span><input id="box1_L" type="number" value="120"></label>
+    <label>Width (X)  <span class="units">in</span><input id="box1_W" type="number" value="72"></label>
+    <label>Height (Z) <span class="units">in</span><input id="box1_H" type="number" value="24"></label>
+    <label>Weight      <span class="units">lb</span><input id="box1_Wt" type="number" value="2500"></label>
+  </div>
 
-        // --- CONFIGURATION: SUSPENSION DYNAMICS ---
-        // This is where you tune the "response" of the vehicle
-        const vehicleConfig = {
-            mass: 150, // kg
-            suspensionStiffness: 30,
-            suspensionRestLength: 0.3,
-            frictionSlip: 1.4,
-            dampingRelaxation: 2.3,
-            dampingCompression: 4.4,
-            maxSuspensionForce: 100000,
-            rollInfluence: 0.01, // Lower prevents rollover at high speed
-            radius: 0.25 // Wheel radius
-        };
+  <h3>Box 2</h3>
+  <div class="grid2">
+    <label>Length (Y) <span class="units">in</span><input id="box2_L" type="number" value="60"></label>
+    <label>Width (X)  <span class="units">in</span><input id="box2_W" type="number" value="60"></label>
+    <label>Height (Z) <span class="units">in</span><input id="box2_H" type="number" value="20"></label>
+    <label>Weight      <span class="units">lb</span><input id="box2_Wt" type="number" value="800"></label>
+    <label>Front Offset (Y) <span class="units">in</span><input id="box2_dY" type="number" value="0"></label>
+  </div>
 
-        // --- 1. SCENE SETUP ---
-        const scene = new THREE.Scene();
-        scene.background = new THREE.Color(0x333333);
+  <h3>Wheels</h3>
+  <div class="grid2">
+    <label>Diameter <span class="units">in</span><input id="wheel_D" type="number" value="32"></label>
+    <label>Weight   <span class="units">lb</span><input id="wheel_Wt" type="number" value="120"></label>
+    <label>Front Y  <span class="units">in</span><input id="wheel_Yf" type="number" value="-20"></label>
+    <label>Rear Spacing <span class="units">in</span><input id="wheel_dYr" type="number" value="80"></label>
+  </div>
 
-        const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 100);
-        camera.position.set(0, 5, 10);
+  <h3>Suspension (Wheel → Body)</h3>
+  <div class="grid2">
+    <label>Front k <span class="units">lb/in</span><input id="k_sf" type="number" value="300"></label>
+    <label>Front c <span class="units">lb·s/in</span><input id="c_sf" type="number" value="25"></label>
+    <label>Rear k <span class="units">lb/in</span><input id="k_sr" type="number" value="350"></label>
+    <label>Rear c <span class="units">lb·s/in</span><input id="c_sr" type="number" value="30"></label>
+  </div>
 
-        const renderer = new THREE.WebGLRenderer({ antialias: true });
-        renderer.setSize(window.innerWidth, window.innerHeight);
-        renderer.shadowMap.enabled = true;
-        document.body.appendChild(renderer.domElement);
+  <h3>Tires (Wheel → Ground)</h3>
+  <div class="grid2">
+    <label>Front k <span class="units">lb/in</span><input id="k_tf" type="number" value="1200"></label>
+    <label>Rear k <span class="units">lb/in</span><input id="k_tr" type="number" value="1400"></label>
+  </div>
 
-        const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
-        scene.add(ambientLight);
-        const dirLight = new THREE.DirectionalLight(0xffffff, 1);
-        dirLight.position.set(10, 20, 10);
-        dirLight.castShadow = true;
-        scene.add(dirLight);
+<h3>Simulation Controls</h3>
+<div class="grid2">
+  <label>Speed v <span class="units">in/s</span>
+    <input id="veh_v" type="number" value="120">
+  </label>
+  <label>Gravity g <span class="units">in/s²</span>
+    <input id="veh_g" type="number" value="386.09">
+  </label>
+</div>
 
-        // --- 2. PHYSICS WORLD ---
-        const world = new CANNON.World();
-        world.gravity.set(0, -9.82, 0);
-        world.broadphase = new CANNON.SAPBroadphase(world);
 
-        // Physics Materials
-        const groundMaterial = new CANNON.Material('ground');
-        const wheelMaterial = new CANNON.Material('wheel');
-        const wheelGroundContact = new CANNON.ContactMaterial(wheelMaterial, groundMaterial, {
-            friction: 0.3,
-            restitution: 0,
-            contactEquationStiffness: 1000
-        });
-        world.addContactMaterial(wheelGroundContact);
+  <h3>Mass Properties (Boxes 1+2)</h3>
+  <div class="readout">
+    <div class="row"><span><b>M</b> (lb·s²/in)</span><span id="mp_M">—</span></div>
+    <div class="row"><span><b>CGx</b> (in)</span><span id="mp_CGx">—</span></div>
+    <div class="row"><span><b>CGy</b> (in)</span><span id="mp_CGy">—</span></div>
+    <div class="row"><span><b>CGz</b> (in)</span><span id="mp_CGz">—</span></div>
+    <hr style="border:none;border-top:1px solid #e6e6e6;margin:6px 0;">
+    <div class="row"><span><b>Ixx</b> (M·in²)</span><span id="mp_Ixx">—</span></div>
+    <div class="row"><span><b>Iyy</b> (M·in²)</span><span id="mp_Iyy">—</span></div>
+    <div class="row"><span><b>Izz</b> (M·in²)</span><span id="mp_Izz">—</span></div>
+  </div>
 
-        // Ground Plane
-        const groundBody = new CANNON.Body({
-            mass: 0, // 0 makes it static
-            material: groundMaterial
-        });
-        groundBody.addShape(new CANNON.Plane());
-        groundBody.quaternion.setFromEuler(-Math.PI / 2, 0, 0);
-        world.addBody(groundBody);
+  <button id="updateBtn">Update Vehicle</button>
 
-        // Visual Ground
-        const gridHelper = new THREE.GridHelper(100, 100);
-        scene.add(gridHelper);
+  <h3>Road Features</h3>
+  <button id="addBumpBtn">Add Speed Bump</button>
+  <button id="addHalfBumpBtn">Add 1/2 Speed Bump</button>
 
-        // --- 3. VEHICLE SETUP ---
-        // Chassis Body
-        const chassisShape = new CANNON.Box(new CANNON.Vec3(1, 0.25, 2)); // Half extents
-        const chassisBody = new CANNON.Body({ mass: vehicleConfig.mass });
-        chassisBody.addShape(chassisShape);
-        chassisBody.position.set(0, 2, 0);
-        chassisBody.angularDamping = 0.5;
-        
-        // Visual Chassis
-        const chassisMesh = new THREE.Mesh(
-            new THREE.BoxGeometry(2, 0.5, 4),
-            new THREE.MeshStandardMaterial({ color: 0x0077ff })
-        );
-        chassisMesh.castShadow = true;
-        scene.add(chassisMesh);
+  <h3>Added Features</h3>
+  <div id="featureList"></div>
+</div>
 
-        // RaycastVehicle Controller
-        const vehicle = new CANNON.RaycastVehicle({
-            chassisBody: chassisBody,
-        });
+<div id="viewer"></div>
 
-        const wheelOptions = {
-            radius: vehicleConfig.radius,
-            directionLocal: new CANNON.Vec3(0, -1, 0),
-            suspensionStiffness: vehicleConfig.suspensionStiffness,
-            suspensionRestLength: vehicleConfig.suspensionRestLength,
-            frictionSlip: vehicleConfig.frictionSlip,
-            dampingRelaxation: vehicleConfig.dampingRelaxation,
-            dampingCompression: vehicleConfig.dampingCompression,
-            maxSuspensionForce: vehicleConfig.maxSuspensionForce,
-            isFrontWheel: true,
-            useCustomSlidingRotationalSpeed: true,
-            customSlidingRotationalSpeed: -30,
-            axleLocal: new CANNON.Vec3(-1, 0, 0)
-        };
+</div>
 
-        // Add Wheels (Front Left, Front Right, Back Left, Back Right)
-        // Note: x is left/right, y is up/down, z is forward/back
-        vehicle.addWheel({ ...wheelOptions, chassisConnectionPointLocal: new CANNON.Vec3(0.8, 0, 1.2) });
-        vehicle.addWheel({ ...wheelOptions, chassisConnectionPointLocal: new CANNON.Vec3(-0.8, 0, 1.2) });
-        vehicle.addWheel({ ...wheelOptions, isFrontWheel: false, chassisConnectionPointLocal: new CANNON.Vec3(0.8, 0, -1.2) });
-        vehicle.addWheel({ ...wheelOptions, isFrontWheel: false, chassisConnectionPointLocal: new CANNON.Vec3(-0.8, 0, -1.2) });
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/controls/OrbitControls.js';
 
-        vehicle.addToWorld(world);
+let scene, camera, renderer, controls;
+let vehicleGroup = new THREE.Group();
+let groundGroup = new THREE.Group();
+let roadFeatures = [];
+let nextFeatureId = 1;
 
-        // Visual Wheels
-        const wheelMeshes = [];
-        vehicle.wheelInfos.forEach((wheel) => {
-            const cylinderGeo = new THREE.CylinderGeometry(wheel.radius, wheel.radius, 0.3, 20);
-            cylinderGeo.rotateZ(Math.PI / 2); // Rotate to correct axis
-            const mesh = new THREE.Mesh(cylinderGeo, new THREE.MeshStandardMaterial({ color: 0x333333 }));
-            scene.add(mesh);
-            wheelMeshes.push(mesh);
-        });
+init();
+buildVehicle();
 
-        // --- 4. INPUT HANDLING ---
-        const keys = { w: false, a: false, s: false, d: false, space: false };
-        document.addEventListener('keydown', (e) => {
-            if(e.key === ' ') keys.space = true;
-            if(e.key.toLowerCase() in keys) keys[e.key.toLowerCase()] = true;
-        });
-        document.addEventListener('keyup', (e) => {
-            if(e.key === ' ') keys.space = false;
-            if(e.key.toLowerCase() in keys) keys[e.key.toLowerCase()] = false;
-        });
+function init() {
+  THREE.Object3D.DEFAULT_UP.set(0,0,1);
 
-        // --- 5. ANIMATION LOOP ---
-        const timeStep = 1 / 60;
-        
-        function animate() {
-            requestAnimationFrame(animate);
+  scene = new THREE.Scene();
+  scene.background = new THREE.Color(0xf0f0f0);
 
-            // Update Physics Inputs
-            const maxSteerVal = 0.5;
-            const maxForce = 500;
-            const brakeForce = 20;
+  camera = new THREE.PerspectiveCamera(45,1,0.1,5000);
+  camera.position.set(300,-500,300);
 
-            // Steering
-            vehicle.setSteeringValue(keys.a ? maxSteerVal : (keys.d ? -maxSteerVal : 0), 0);
-            vehicle.setSteeringValue(keys.a ? maxSteerVal : (keys.d ? -maxSteerVal : 0), 1);
+  renderer = new THREE.WebGLRenderer({antialias:true});
+  renderer.setSize(viewer.clientWidth,viewer.clientHeight);
+  viewer.appendChild(renderer.domElement);
 
-            // Engine
-            const engineForce = keys.w ? -maxForce : (keys.s ? maxForce : 0);
-            vehicle.applyEngineForce(engineForce, 2);
-            vehicle.applyEngineForce(engineForce, 3);
+  controls = new OrbitControls(camera,renderer.domElement);
+  controls.enableDamping = true;
+  controls.dampingFactor = 0.08;
+  controls.update();
 
-            // Brakes
-            const currentBrake = keys.space ? brakeForce : 0;
-            vehicle.setBrake(currentBrake, 0);
-            vehicle.setBrake(currentBrake, 1);
-            vehicle.setBrake(currentBrake, 2);
-            vehicle.setBrake(currentBrake, 3);
+  window.addEventListener('resize',onResize);
 
-            // Step Physics
-            world.step(timeStep);
+  scene.add(new THREE.AmbientLight(0xffffff,0.6));
+  const dl = new THREE.DirectionalLight(0xffffff,0.8);
+  dl.position.set(200,-200,400);
+  scene.add(dl);
 
-            // Sync Visuals to Physics
-            // Chassis
-            chassisMesh.position.copy(chassisBody.position);
-            chassisMesh.quaternion.copy(chassisBody.quaternion);
+  scene.add(vehicleGroup);
+  scene.add(groundGroup);
 
-            // Wheels
-            for (let i = 0; i < vehicle.wheelInfos.length; i++) {
-                vehicle.updateWheelTransform(i);
-                const transform = vehicle.wheelInfos[i].worldTransform;
-                wheelMeshes[i].position.copy(transform.position);
-                wheelMeshes[i].quaternion.copy(transform.quaternion);
-            }
+  const groundPatch = new THREE.Mesh(
+    new THREE.PlaneGeometry(600,600,40,40),
+    new THREE.MeshStandardMaterial({
+      color:0xcccccc,
+      side:THREE.DoubleSide,
+      depthWrite:false
+    })
+  );
+  groundPatch.position.z = -0.5;
+  groundGroup.add(groundPatch);
 
-            // Camera Follow
-            camera.position.x = chassisMesh.position.x + 5;
-            camera.position.z = chassisMesh.position.z + 5;
-            camera.lookAt(chassisMesh.position);
+  animate();
+}
 
-            renderer.render(scene, camera);
-        }
+function onResize(){
+  camera.aspect = viewer.clientWidth/viewer.clientHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(viewer.clientWidth,viewer.clientHeight);
+}
 
-        animate();
+function buildVehicle(){
+  vehicleGroup.clear();
 
-        // Handle Window Resize
-        window.addEventListener('resize', () => {
-            camera.aspect = window.innerWidth / window.innerHeight;
-            camera.updateProjectionMatrix();
-            renderer.setSize(window.innerWidth, window.innerHeight);
-        });
-    </script>
+  const L1 = +box1_L.value;
+  const W1 = +box1_W.value;
+  const H1 = +box1_H.value;
+  const R  = +wheel_D.value/2;
+
+  const L2 = +box2_L.value;
+  const W2 = +box2_W.value;
+  const H2 = +box2_H.value;
+  const dY = +box2_dY.value;
+
+  // Box 1
+  const box1 = new THREE.Mesh(
+    new THREE.BoxGeometry(W1,L1,H1),
+    new THREE.MeshStandardMaterial({color:0x555555})
+  );
+  box1.position.set(0,-L1/2,H1/2+R);
+  vehicleGroup.add(box1);
+
+  // Box 2
+  const box2 = new THREE.Mesh(
+    new THREE.BoxGeometry(W2,L2,H2),
+    new THREE.MeshStandardMaterial({color:0xaaaaaa})
+  );
+  box2.position.set(0, dY - L2/2, H1 + H2/2 + R);
+  vehicleGroup.add(box2);
+
+  // Wheels (visual only)
+  const wheelGeom = new THREE.CylinderGeometry(R,R,4,32);
+  const wheelMat = new THREE.MeshStandardMaterial({color:0x000000});
+  const yRear = +wheel_Yf.value - +wheel_dYr.value;
+  const xOff = W1/2;
+
+  [[-xOff,+wheel_Yf.value],[xOff,+wheel_Yf.value],[-xOff,yRear],[xOff,yRear]].forEach(([x,y])=>{
+    const w = new THREE.Mesh(wheelGeom,wheelMat);
+    w.rotation.z = Math.PI/2;
+    w.position.set(x,y,R);
+    vehicleGroup.add(w);
+  });
+
+  // Ground patch follows vehicle position (no rotation)
+  groundGroup.position.set(0,-L1/2,0);
+
+  // Orbit target (unchanged behavior)
+  controls.target.set(0,-L1/2,H1);
+  controls.update();
+
+  // Compute & display mass properties (boxes only)
+  computeAndDisplayMassProps({
+    box1: {L:L1, W:W1, H:H1, Wt:+box1_Wt.value, r: box1.position},
+    box2: {L:L2, W:W2, H:H2, Wt:+box2_Wt.value, r: box2.position}
+  });
+computeWheelOffsetsFromCG();
+
+
+}
+
+
+function computeWheelOffsetsFromCG() {
+  if (!window.massProps) return;
+
+  const { CG } = window.massProps;
+
+  const W = +box1_W.value;
+  const yF = +wheel_Yf.value;
+  const yR = yF - +wheel_dYr.value;
+
+  const wheels = [
+    { name:'FL', x:-W/2, y:yF },
+    { name:'FR', x: W/2, y:yF },
+    { name:'RL', x:-W/2, y:yR },
+    { name:'RR', x: W/2, y:yR }
+  ];
+
+  window.wheelOffsets = wheels.map(w => ({
+    name: w.name,
+    x: w.x - CG.x,
+    y: w.y - CG.y
+  }));
+
+  console.table(window.wheelOffsets);
+}
+
+
+/* ---------- MASS PROPERTIES (boxes only) ---------- */
+function computeAndDisplayMassProps({box1, box2}) {
+  // g in in/s^2 for lb/in units
+  const g = 386.0886;
+
+  const m1 = box1.Wt / g;
+  const m2 = box2.Wt / g;
+  const M  = m1 + m2;
+
+  // CG
+  const xCG = (m1*box1.r.x + m2*box2.r.x) / M;
+  const yCG = (m1*box1.r.y + m2*box2.r.y) / M;
+  const zCG = (m1*box1.r.z + m2*box2.r.z) / M;
+
+  // Inertia about each box centroid (aligned axes)
+  // For a box with dimensions (W along x, L along y, H along z)
+  // Ixx = (1/12)m(L^2 + H^2), Iyy = (1/12)m(W^2 + H^2), Izz = (1/12)m(W^2 + L^2)
+  const I1 = {
+    Ixx: (m1/12) * (box1.L*box1.L + box1.H*box1.H),
+    Iyy: (m1/12) * (box1.W*box1.W + box1.H*box1.H),
+    Izz: (m1/12) * (box1.W*box1.W + box1.L*box1.L),
+  };
+  const I2 = {
+    Ixx: (m2/12) * (box2.L*box2.L + box2.H*box2.H),
+    Iyy: (m2/12) * (box2.W*box2.W + box2.H*box2.H),
+    Izz: (m2/12) * (box2.W*box2.W + box2.L*box2.L),
+  };
+
+  // Parallel axis shift to combined CG
+  const d1 = { x: box1.r.x - xCG, y: box1.r.y - yCG, z: box1.r.z - zCG };
+  const d2 = { x: box2.r.x - xCG, y: box2.r.y - yCG, z: box2.r.z - zCG };
+
+  const Ixx = (I1.Ixx + m1*(d1.y*d1.y + d1.z*d1.z)) + (I2.Ixx + m2*(d2.y*d2.y + d2.z*d2.z));
+  const Iyy = (I1.Iyy + m1*(d1.x*d1.x + d1.z*d1.z)) + (I2.Iyy + m2*(d2.x*d2.x + d2.z*d2.z));
+  const Izz = (I1.Izz + m1*(d1.x*d1.x + d1.y*d1.y)) + (I2.Izz + m2*(d2.x*d2.x + d2.y*d2.y));
+
+  // Display (fixed formatting)
+  mp_M.textContent   = fmt(M);
+  mp_CGx.textContent = fmt(xCG);
+  mp_CGy.textContent = fmt(yCG);
+  mp_CGz.textContent = fmt(zCG);
+  mp_Ixx.textContent = fmt(Ixx);
+  mp_Iyy.textContent = fmt(Iyy);
+  mp_Izz.textContent = fmt(Izz);
+
+  // Store for later dynamics (global)
+  window.massProps = {
+    g,
+    m1, m2, M,
+    CG: {x:xCG, y:yCG, z:zCG},
+    I:  {Ixx, Iyy, Izz}
+  };
+}
+
+function fmt(v){
+  if (!isFinite(v)) return '—';
+  const a = Math.abs(v);
+  if (a === 0) return '0';
+  if (a < 1e-3 || a > 1e6) return v.toExponential(3);
+  return v.toFixed(3);
+}
+
+/* ---------- SPEED BUMP UI ---------- */
+document.getElementById('addBumpBtn').onclick = ()=>{
+  Swal.fire({
+    title:'Add Speed Bump',
+    html:`
+      <div style="text-align:left;font-size:12px;display:grid;grid-template-columns:1fr 1fr;gap:8px 10px">
+        <label>Height (in)<input id="bH" type="number" value="3" style="width:100%"></label>
+        <label>Width Y (in)<input id="bW" type="number" value="24" style="width:100%"></label>
+        <label style="grid-column:1 / span 2">Distance from front (in)
+          <input id="bY" type="number" value="60" style="width:100%">
+        </label>
+      </div>
+    `,
+    focusConfirm:false,
+    preConfirm:() => ({
+      h:+document.getElementById('bH').value,
+      w:+document.getElementById('bW').value,
+      y:+document.getElementById('bY').value
+    })
+  }).then(res=>{
+    if(res.value) addSpeedBump(res.value);
+  });
+};
+
+/* ---------- HALF SPEED BUMP UI ---------- */
+document.getElementById('addHalfBumpBtn').onclick = ()=>{
+  Swal.fire({
+    title:'Add 1/2 Speed Bump',
+    html:`
+      <div style="text-align:left;font-size:12px;display:grid;grid-template-columns:1fr 1fr;gap:8px 10px">
+        <label>Height (in)<input id="bH" type="number" value="3" style="width:100%"></label>
+        <label>Width Y (in)<input id="bW" type="number" value="24" style="width:100%"></label>
+        <label>Side
+          <select id="bSide" style="width:100%">
+            <option value="left">Left</option>
+            <option value="right">Right</option>
+          </select>
+        </label>
+        <label style="grid-column:1 / span 2">Distance from front (in)
+          <input id="bY" type="number" value="60" style="width:100%">
+        </label>
+      </div>
+    `,
+    focusConfirm:false,
+    preConfirm:() => ({
+      h:+document.getElementById('bH').value,
+      w:+document.getElementById('bW').value,
+      y:+document.getElementById('bY').value,
+      side: document.getElementById('bSide').value
+    })
+  }).then(res=>{
+    if(res.value) addHalfSpeedBump(res.value);
+  });
+};
+
+/*
+Speed bump definition:
+- Cross-section is semicircle in (Y,Z)
+- Extruded across X for full road width
+- Positioned by distance from vehicle front face (world y=0)
+*/
+function addSpeedBump({h,w,y}) {
+  const L = +box1_L.value;
+  const W = +box1_W.value;
+  const r = Math.max(1e-6, w/2);
+
+  const shape = new THREE.Shape();
+  shape.moveTo(-r, 0);
+  shape.absarc(0, 0, r, 0, Math.PI, false);
+  shape.lineTo(r, 0);
+
+  const geom = new THREE.ExtrudeGeometry(shape, {
+    depth: W,
+    bevelEnabled: false,
+    steps: 1
+  });
+
+  geom.scale(1, h / r, 1);
+  geom.translate(0, 0, -W/2);
+
+  const P = new THREE.Matrix4().set(
+    0, 0, 1, 0,
+    1, 0, 0, 0,
+    0, 1, 0, 0,
+    0, 0, 0, 1
+  );
+  geom.applyMatrix4(P);
+
+  const yLocal = y + L/2;
+  geom.translate(0, yLocal, 0);
+
+  const bump = new THREE.Mesh(
+    geom,
+    new THREE.MeshStandardMaterial({ color: 0x888888 })
+  );
+
+  groundGroup.add(bump);
+
+  roadFeatures.push({
+    id: nextFeatureId++,
+    type: 'bump',
+    params: { h, w, y },
+    mesh: bump
+  });
+  refreshFeatureList();
+}
+
+function addHalfSpeedBump({h,w,y,side}) {
+  const L = +box1_L.value;
+  const W = +box1_W.value;
+  const r = Math.max(1e-6, w/2);
+
+  const shape = new THREE.Shape();
+  shape.moveTo(-r, 0);
+  shape.absarc(0, 0, r, 0, Math.PI, false);
+  shape.lineTo(r, 0);
+
+  const halfW = W/2;
+
+  const geom = new THREE.ExtrudeGeometry(shape, {
+    depth: halfW,
+    bevelEnabled: false,
+    steps: 1
+  });
+
+  geom.scale(1, h / r, 1);
+  geom.translate(0, 0, -halfW/2);
+
+  const P = new THREE.Matrix4().set(
+    0, 0, 1, 0,
+    1, 0, 0, 0,
+    0, 1, 0, 0,
+    0, 0, 0, 1
+  );
+  geom.applyMatrix4(P);
+
+  const yLocal = y + L/2;
+  geom.translate(0, yLocal, 0);
+
+  const bump = new THREE.Mesh(
+    geom,
+    new THREE.MeshStandardMaterial({ color: 0x777777 })
+  );
+
+  // Lateral placement: left/right half of vehicle width
+  bump.position.x += (side === 'left' ? -1 : 1) * (W/4);
+
+  groundGroup.add(bump);
+
+  roadFeatures.push({
+    id: nextFeatureId++,
+    type: 'half-bump',
+    params: { h, w, y, side },
+    mesh: bump
+  });
+  refreshFeatureList();
+}
+
+function roadHeightAt(x, y) {
+  let z = 0;
+
+  for (const f of roadFeatures) {
+    if (f.type === 'bump') {
+      z = Math.max(z, evalFullBump(f.params, x, y));
+    }
+    if (f.type === 'half-bump') {
+      z = Math.max(z, evalHalfBump(f.params, x, y));
+    }
+  }
+  return z;
+}
+
+
+function evalFullBump({ h, w, y }, x, yq) {
+  const r = w / 2;
+  const dy = yq - y;
+
+  if (Math.abs(dy) > r) return 0;
+
+  // Semicircle profile
+  return h * Math.sqrt(1 - (dy*dy)/(r*r));
+}
+
+
+function evalHalfBump({ h, w, y, side }, x, yq) {
+  const r = w / 2;
+  const dy = yq - y;
+
+  if (Math.abs(dy) > r) return 0;
+
+  // Lateral filtering
+  if (side === 'left'  && x > 0) return 0;
+  if (side === 'right' && x < 0) return 0;
+
+  return h * Math.sqrt(1 - (dy*dy)/(r*r));
+}
+
+//const yWheel = wheelOffsets[i].y + v * t;
+//const zRoad  = roadHeightAt(wheelOffsets[i].x, yWheel);
+
+/* ---------- FEATURE LIST ---------- */
+function refreshFeatureList() {
+  const list = document.getElementById('featureList');
+  list.innerHTML = '';
+
+  roadFeatures.forEach(f => {
+    const row = document.createElement('div');
+    row.style.fontSize = '11px';
+    row.style.marginBottom = '4px';
+
+    const label =
+      (f.type === 'half-bump')
+        ? `½ Speed Bump (${f.params.side}) @ ${f.params.y} in`
+        : `Speed Bump @ ${f.params.y} in`;
+
+    row.innerHTML = `
+      ${label}
+      <button data-id="${f.id}" style="margin-left:6px;font-size:10px">Delete</button>
+    `;
+    list.appendChild(row);
+  });
+}
+
+document.getElementById('featureList').onclick = (e) => {
+  if (e.target.tagName !== 'BUTTON') return;
+  deleteFeature(Number(e.target.dataset.id));
+};
+
+function deleteFeature(id) {
+  const i = roadFeatures.findIndex(f => f.id === id);
+  if (i < 0) return;
+
+  groundGroup.remove(roadFeatures[i].mesh);
+  roadFeatures.splice(i, 1);
+  refreshFeatureList();
+}
+
+function bodyDZatWheel(state, wheelName) {
+  const w = window.wheelOffsets.find(o => o.name === wheelName);
+  if (!w) throw new Error(`Unknown wheel: ${wheelName}`);
+
+  return (
+    state.dz
+    - state.dphi   * w.x	
+    + state.dtheta * w.y
+  );
+}
+
+
+//bodyZatWheel(state,'FL') === 10
+//bodyZatWheel(state,'RR') === 10
+
+
+function tireStateAtWheel(state, wheelName) {
+  const w = window.wheelOffsets.find(o => o.name === wheelName);
+  if (!w) throw new Error(`Unknown wheel: ${wheelName}`);
+
+  const zw = state.zw[wheelName];
+  const zRoad = roadHeightAt(w.x, w.y);
+
+  const deflection = zw - zRoad;
+
+  // Tire stiffness selection
+  const isFront = (wheelName === 'FL' || wheelName === 'FR');
+  const kt = isFront ? +k_tf.value : +k_tr.value;
+
+  const inContact = deflection > 0;
+  const force = inContact ? kt * deflection : 0;
+
+  return {
+    zw,
+    zRoad,
+    deflection,
+    inContact,
+    force
+  };
+}
+
+
+
+function computeAllTireForces(state) {
+  const out = {};
+  let FzTotal = 0;
+
+  ['FL','FR','RL','RR'].forEach(name => {
+    const t = tireStateAtWheel(state, name);
+    out[name] = t;
+    FzTotal += t.force;
+  });
+
+  out.FzTotal = FzTotal;
+  return out;
+}
+
+
+
+
+function suspensionStateAtWheel(state, wheelName) {
+  const w = window.wheelOffsets.find(o => o.name === wheelName);
+  if (!w) throw new Error(`Unknown wheel: ${wheelName}`);
+
+  // Body kinematics at wheel
+  const zb  = bodyZatWheel(state, wheelName);
+  const dzb = bodyDZatWheel(state, wheelName);
+
+  // Wheel kinematics
+  const zw  = state.zw[wheelName];
+  const dzw = state.dzw[wheelName];
+
+  // Deflection & rate
+  const deflection = zb - zw;
+  const ddeflection = dzb - dzw;
+
+  // Front / rear selection
+  const isFront = (wheelName === 'FL' || wheelName === 'FR');
+  const ks = isFront ? +k_sf.value : +k_sr.value;
+  const cs = isFront ? +c_sf.value : +c_sr.value;
+
+  const force = ks * deflection + cs * ddeflection;
+
+  return {
+    zb, dzb,
+    zw, dzw,
+    deflection,
+    ddeflection,
+    force
+  };
+}
+
+
+
+function computeAllSuspensionForces(state) {
+  const out = {};
+  let FzBody = 0;
+  let Mx = 0;
+  let My = 0;
+
+  ['FL','FR','RL','RR'].forEach(name => {
+    const s = suspensionStateAtWheel(state, name);
+    out[name] = s;
+
+    const w = window.wheelOffsets.find(o => o.name === name);
+
+    // Body force & moments
+    FzBody += s.force;
+    Mx += -s.force * w.x; // roll moment
+    My +=  s.force * w.y; // pitch moment
+  });
+
+  out.FzBody = FzBody;
+  out.Mx = Mx;
+  out.My = My;
+
+  return out;
+}
+
+
+function computeAllForcesSnapshot(state) {
+  return {
+    tire: computeAllTireForces(state),
+    suspension: computeAllSuspensionForces(state)
+  };
+}
+
+
+
+
+function computeEOMAccelerations(state) {
+  if (!window.massProps) throw new Error('massProps not defined yet (buildVehicle must run).');
+  if (!window.wheelOffsets) throw new Error('wheelOffsets not defined yet (computeWheelOffsets must run).');
+
+  const g = +veh_g.value;                 // in/s^2
+  const M = window.massProps.M;           // lb*s^2/in (slugs-in units)
+  const Ixx = window.massProps.I.Ixx;     // consistent with your massProps store
+  const Iyy = window.massProps.I.Iyy;
+
+  // wheel mass (each) from UI (lb -> lb*s^2/in)
+  const mw = (+wheel_Wt.value) / g;
+
+  // Per-corner forces
+  const names = ['FL','FR','RL','RR'];
+
+  let sumFzBody = 0;   // total vertical force on body (excluding weight)
+  let sumTy = 0;       // torque about +Y on body
+  let sumTx = 0;       // torque about +X on body
+
+  const ddzw = { FL:0, FR:0, RL:0, RR:0 };
+  const dbg = {}; // optional debug packet per wheel
+
+  for (const name of names) {
+    const w = window.wheelOffsets.find(o => o.name === name);
+    if (!w) throw new Error(`wheelOffsets missing ${name}`);
+
+    // Tire (up on wheel)
+    const t = tireStateAtWheel(state, name);
+    const Ft = t.force;
+
+    // Suspension (force on wheel in +Z)
+    const s = suspensionStateAtWheel(state, name);
+    const Fs_wheel = s.force;
+
+    // Body gets opposite (force on body in +Z)
+    const Fbody = -Fs_wheel;
+
+    // Accumulate body force and torques (about CG)
+    sumFzBody += Fbody;
+
+    // Using r=(x,y,0), F=(0,0,Fbody): tau = r x F = (yF, -xF, 0)
+    sumTx += w.y * Fbody;       // about +X (your theta)
+    sumTy += (-w.x) * Fbody;    // about +Y (your phi)
+
+    // Wheel vertical acceleration
+    ddzw[name] = (Fs_wheel + Ft - mw * g) / mw;
+
+    dbg[name] = {
+      x: w.x, y: w.y,
+      Ft, Fs_wheel,
+      inContact: t.inContact,
+      zRoad: t.zRoad,
+      tireDefl: t.deflection,
+      suspDefl: s.deflection
+    };
+  }
+
+  // Body accelerations
+  const ddz = (sumFzBody - M * g) / M;
+  const ddphi = (sumTy) / Iyy;     // phi about +Y
+  const ddtheta = (sumTx) / Ixx;   // theta about +X
+
+  return {
+    body: { ddz, ddphi, ddtheta },
+    wheels: { ddzw },
+    sums: { sumFzBody, sumTx, sumTy },
+    dbg
+  };
+}
+
+
+// Example initial state (pick reasonable starting values)
+const state = {
+  z: 10, phi: 0, theta: 0,
+  dz: 0, dphi: 0, dtheta: 0,
+  zw: { FL: 0, FR: 0, RL: 0, RR: 0 },
+  dzw: { FL: 0, FR: 0, RL: 0, RR: 0 }
+};
+
+
+
+function wheelXYForRoad(name) {
+  const w = window.wheelOffsets.find(o => o.name === name);
+  const CG = window.massProps?.CG || {x:0, y:0};
+
+  // absolute vehicle-frame coordinates used by road features
+  return {
+    x: w.x + CG.x,
+    y: w.y + CG.y
+  };
+}
+
+const {x,y} = wheelXYForRoad('FL');
+const zRoad = roadHeightAt(x,y);
+
+
+
+function initStaticEquilibrium(state) {
+  if (!window.massProps || !window.wheelOffsets) {
+// If stable, finalize state
+if (!changed) {
+  state.z = z;
+  state.phi = phi;
+  state.theta = theta;
+  state.dz = 0;
+  state.dphi = 0;
+  state.dtheta = 0;
+  state.zw = zw;
+  state.dzw = { FL:0, FR:0, RL:0, RR:0 };
+  state.contact = {...contact};
+  return state;
+}
+
+    throw new Error('Run buildVehicle() first so massProps and wheelOffsets exist.');
+  }
+
+  const g = +veh_g.value;
+  const M = window.massProps.M;
+
+  // each wheel mass from UI wheel weight
+  const mw = (+wheel_Wt.value) / g;
+
+  const names = ['FL','FR','RL','RR'];
+
+  // Contact flags (iterate)
+  const contact = { FL:true, FR:true, RL:true, RR:true };
+
+  // Helper: front/rear stiffness
+  function ksOf(name){
+    const isFront = (name === 'FL' || name === 'FR');
+    return isFront ? +k_sf.value : +k_sr.value;
+  }
+  function ktOf(name){
+    const isFront = (name === 'FL' || name === 'FR');
+    return isFront ? +k_tf.value : +k_tr.value;
+  }
+
+  // Build & solve 3x3 for [z, phi, theta]
+  function solveBodyForContactSet() {
+    // We assemble equations in the form:
+    // A * [z, phi, theta]^T = b
+    //
+    // Using z_bi = z - phi*x_i + theta*y_i
+    //
+    // For a contacting wheel:
+    // Fs_i = K_eff_i * z_bi - C_i
+    // where K_eff_i = ks*kt/(kt-ks)
+    // and C_i = ks*(mw*g + kt*zRoad)/(kt-ks)
+    //
+    // For a lifted wheel:
+    // Fs_i = mw*g  (constant), and does not depend on z_bi.
+
+    let A00=0, A01=0, A02=0, b0=0; // force equilibrium
+    let A10=0, A11=0, A12=0, b1=0; // pitch moment equilibrium (about +X) using y
+    let A20=0, A21=0, A22=0, b2=0; // roll moment equilibrium (about +Y) using x
+
+    // Body equations are:
+    // sum(-Fs_i) - M g = 0
+    // sum( y_i * (-Fs_i) ) = 0
+    // sum( (-x_i) * (-Fs_i) ) = 0
+    //
+    // i.e. -sum(Fs_i) = M g
+
+    for (const name of names) {
+      const w = window.wheelOffsets.find(o => o.name === name);
+      const ks = ksOf(name);
+
+      // road height at that wheel location
+      const xy = wheelXYForRoad(name);
+      const zRoad = roadHeightAt(xy.x, xy.y);
+
+      if (contact[name]) {
+        const kt = ktOf(name);
+
+        // guard: if kt == ks, effective expressions blow up
+        const denom = (kt - ks);
+        if (Math.abs(denom) < 1e-9) throw new Error('kt and ks too close; choose kt > ks.');
+
+        const Keff = ks * kt / denom;
+        const C = ks * (mw*g + kt*zRoad) / denom;
+
+        // Fs = Keff*(z - phi*x + theta*y) - C
+
+        // Contribution to -Fs in force equation:
+        // -Fs = -(Keff*z) + (Keff*x)*phi - (Keff*y)*theta + C
+        A00 += -Keff;
+        A01 +=  Keff * w.x;
+        A02 += -Keff * w.y;
+        b0  +=  C;
+
+        // Pitch moment about +X: sum(y * (-Fs)) = 0
+        A10 += (-Keff) * w.y;
+        A11 += ( Keff * w.x) * w.y;
+        A12 += (-Keff * w.y) * w.y;
+        b1  += C * w.y;
+
+        // Roll moment about +Y: sum((-x) * (-Fs)) = 0
+        A20 += (-Keff) * (-w.x);
+        A21 += ( Keff * w.x) * (-w.x);
+        A22 += (-Keff * w.y) * (-w.x);
+        b2  += C * (-w.x);
+
+      } else {
+        // lifted: Fs = mw*g constant (from wheel equilibrium with Ft=0)
+        // so -Fs contributes constant: -mw*g
+        // thus b accumulates that constant on RHS
+        b0 += -mw*g;
+
+        b1 += (-mw*g) * w.y;
+        b2 += (-mw*g) * (-w.x);
+      }
+    }
+
+    // Now apply the weight term: force equilibrium is sum(-Fs) - M g = 0
+    // Our assembled b0 currently is sum(constants in -Fs); move M g to RHS:
+    // A*[z,phi,theta] = (M g) - b0_constants?  Careful:
+    // We assembled A and b such that:
+    // (A00*z + A01*phi + A02*theta) + b0 = M g
+    // => A00*z + A01*phi + A02*theta = M g - b0
+    const rhs0 = M*g - b0;
+    const rhs1 = -b1;  // moments equation: sum(y*(-Fs)) = 0 => A*vars + b = 0 => A*vars = -b
+    const rhs2 = -b2;
+
+    const sol = solve3x3(
+      [[A00,A01,A02],[A10,A11,A12],[A20,A21,A22]],
+      [rhs0,rhs1,rhs2]
+    );
+
+    return { z: sol[0], phi: sol[1], theta: sol[2] };
+  }
+
+  // Given z,phi,theta compute wheel zw from equilibrium
+  function computeWheelsGivenBody(z,phi,theta) {
+    const zw = {};
+    const tireDefl = {};
+    const inContact = {};
+
+    for (const name of names) {
+      const w = window.wheelOffsets.find(o => o.name === name);
+      const ks = ksOf(name);
+      const kt = ktOf(name);
+
+      const zb = z - phi*w.x + theta*w.y;
+
+      const xy = wheelXYForRoad(name);
+      const zRoad = roadHeightAt(xy.x, xy.y);
+
+      if (contact[name]) {
+        // Contact assumed: solve wheel equilibrium analytically
+        // ks(zb-zw) + kt(zw-zRoad) - mw*g = 0
+        // => zw = (mw*g + kt*zRoad - ks*zb)/(kt-ks)
+        const denom = (kt - ks);
+        zw[name] = (mw*g + kt*zRoad - ks*zb) / denom;
+      } else {
+        // Lifted: Ft=0 -> ks(zb-zw) - mw*g = 0 => zw = zb - mw*g/ks
+        zw[name] = zb - (mw*g)/ks;
+      }
+
+      const defl = zw[name] - zRoad;
+      tireDefl[name] = defl;
+      inContact[name] = defl > 0;
+    }
+
+    return { zw, tireDefl, inContact };
+  }
+
+  // Iterate contact set
+  for (let iter=0; iter<8; iter++) {
+    const { z, phi, theta } = solveBodyForContactSet();
+    const { zw, inContact } = computeWheelsGivenBody(z,phi,theta);
+
+    // Update contact flags
+    let changed = false;
+    for (const name of names) {
+      const newC = inContact[name];
+      if (newC !== contact[name]) { contact[name] = newC; changed = true; }
+    }
+
+
+  throw new Error('Static equilibrium did not converge (check stiffness values / road geometry).');
+}
+
+/* ---- tiny 3x3 solver (Gaussian elimination) ---- */
+function solve3x3(A, b) {
+  // Copy
+  const m = A.map(r => r.slice());
+  const x = b.slice();
+
+  for (let k=0; k<3; k++) {
+    // pivot
+    let p = k;
+    for (let i=k+1; i<3; i++) if (Math.abs(m[i][k]) > Math.abs(m[p][k])) p = i;
+    if (Math.abs(m[p][k]) < 1e-12) throw new Error('Singular 3x3 system in static equilibrium.');
+
+    // swap
+    if (p !== k) { [m[p], m[k]] = [m[k], m[p]]; [x[p], x[k]] = [x[k], x[p]]; }
+
+    // eliminate
+    for (let i=k+1; i<3; i++) {
+      const f = m[i][k]/m[k][k];
+      for (let j=k; j<3; j++) m[i][j] -= f*m[k][j];
+      x[i] -= f*x[k];
+    }
+  }
+
+  // back-sub
+  const sol = [0,0,0];
+  for (let i=2; i>=0; i--) {
+    let s = x[i];
+    for (let j=i+1; j<3; j++) s -= m[i][j]*sol[j];
+    sol[i] = s/m[i][i];
+  }
+  return sol;
+}
+
+function bodyZatWheel(state, wheelName) {
+  const w = window.wheelOffsets.find(o => o.name === wheelName);
+  return state.z - state.phi * w.x + state.theta * w.y;
+}
+
+initStaticEquilibrium(state);
+console.log(state);
+
+//function packState(state) → array
+//function unpackState(array, state)
+
+function animate(){
+  requestAnimationFrame(animate);
+  renderer.render(scene,camera);
+}
+
+document.getElementById('updateBtn').onclick = buildVehicle;
+
+/* ------------------------------------------------------------------ RK4 INTEGRATION & STATE MANAGEMENT ------------------------------------------------------------------ */ // Map of indices for the flat array used by RK4 // 0-2: Body Pos, 3-5: Body Vel, 6-9: Wheel Pos, 10-13: Wheel Vel const IDX = { Z:0, PHI:1, THETA:2, DZ:3, DPHI:4, DTHETA:5, ZW_FL:6, ZW_FR:7, ZW_RL:8, ZW_RR:9, DZW_FL:10, DZW_FR:11, DZW_RL:12, DZW_RR:13 }; function packState(s) { return [ s.z, s.phi, s.theta, s.dz, s.dphi, s.dtheta, s.zw.FL, s.zw.FR, s.zw.RL, s.zw.RR, s.dzw.FL, s.dzw.FR, s.dzw.RL, s.dzw.RR ]; } function unpackState(arr, s) { s.z = arr[IDX.Z]; s.phi = arr[IDX.PHI]; s.theta = arr[IDX.THETA]; s.dz = arr[IDX.DZ]; s.dphi = arr[IDX.DPHI]; s.dtheta= arr[IDX.DTHETA]; s.zw.FL = arr[IDX.ZW_FL]; s.zw.FR = arr[IDX.ZW_FR]; s.zw.RL = arr[IDX.ZW_RL]; s.zw.RR = arr[IDX.ZW_RR]; s.dzw.FL= arr[IDX.DZW_FL]; s.dzw.FR= arr[IDX.DZW_FR]; s.dzw.RL= arr[IDX.DZW_RL]; s.dzw.RR= arr[IDX.DZW_RR]; } // Calculates dy/dt for the RK4 solver function getDerivatives(t, y) { // 1. Create a temp state object to hold 'y' // We reuse the global 'state' structure but don't mutate it directly for the render yet const tempState = { z:0, phi:0, theta:0, dz:0, dphi:0, dtheta:0, zw:{FL:0,FR:0,RL:0,RR:0}, dzw:{FL:0,FR:0,RL:0,RR:0}, // We need to pass the current simulation time to road lookup time: t }; unpackState(y, tempState); // 2. Calculate Accelerations based on this temp state // Note: We need to handle the road position calculation inside your physics functions. // We'll update wheel offsets for the current 't' implicitly if we assume V is constant. // Update global road lookup time helper if needed, or pass t to physics. // For now, we assume standard physics calc. // Calculate Dynamics const result = computeEOMAccelerations(tempState); const acc = result.body; const wAcc = result.wheels.ddzw; // 3. Formulate dy/dt array // dy/dt = [velocity, acceleration] return [ // Body Velocities (dy/dt of Pos) tempState.dz, tempState.dphi, tempState.dtheta, // Body Accelerations (dy/dt of Vel) acc.ddz, acc.ddphi, acc.ddtheta, // Wheel Velocities tempState.dzw.FL, tempState.dzw.FR, tempState.dzw.RL, tempState.dzw.RR, // Wheel Accelerations wAcc.FL, wAcc.FR, wAcc.RL, wAcc.RR ]; } function rk4Step(t, y, dt) { const k1 = getDerivatives(t, y); const y2 = y.map((val, i) => val + k1[i] * dt * 0.5); const k2 = getDerivatives(t + dt * 0.5, y2); const y3 = y.map((val, i) => val + k2[i] * dt * 0.5); const k3 = getDerivatives(t + dt * 0.5, y3); const y4 = y.map((val, i) => val + k3[i] * dt); const k4 = getDerivatives(t + dt, y4); // Combine return y.map((val, i) => val + (dt / 6.0) * (k1[i] + 2*k2[i] + 2*k3[i] + k4[i])); } /* ------------------------------------------------------------------ VISUALIZATION SYNC & ANIMATION LOOP ------------------------------------------------------------------ */ // Helper to move the Three.js objects to match Physics State function syncVisuals(s, simTime) { // 1. Move Vehicle Body (Heave, Roll, Pitch) // Note: The visual vehicle group includes the wheels, so we move the whole group vehicleGroup.position.z = s.z; vehicleGroup.rotation.y = s.phi; // ThreeJS Y is often vertical, but here Z is vertical? // CHECK: Your init() sets Object3D.DEFAULT_UP.set(0,0,1). // So Z is up. Rotation around Y is Pitch or Roll? // ISO: X forward, Y left, Z up. // Roll is about X. Pitch is about Y. // Your physics: phi (roll about Y?), theta (pitch about X?). // Let's map based on your EOM: sumTy -> Iyy. Usually Ty is torque about Y. // Mapping based on standard ISO 8855 usually used in these scripts: // If your X is forward and Z is up: vehicleGroup.rotation.x = s.theta; // Pitch vehicleGroup.rotation.y = s.phi; // Roll // 2. Move Wheels relative to body // We need to find the visual meshes we created in buildVehicle // They were added to vehicleGroup. Let's traverse or store references. // Since buildVehicle clears the group, let's find them by name or order. // Better: update buildVehicle to store references. // For now, we assume the last 4 children of vehicleGroup are wheels. // Alternatively, we leave the wheels "rigid" to the body in this view // and only animate the suspension compression if you want high fidelity. // Given the code, the wheels are children of the chassis. // To animate suspension travel, we would need to move the wheel meshes locally in Z. // If you want the vehicle to "travel" down the road visually: // We usually keep the car static at Y=0 and move the road pattern, // OR we move the car along Y. const v = +veh_v.value; vehicleGroup.position.y = v * simTime; // Camera tracking controls.target.set(0, vehicleGroup.position.y, 0); controls.update(); // Move the light to follow const light = scene.children.find(c => c.isDirectionalLight); if(light) { light.position.y = vehicleGroup.position.y - 200; light.target.position.y = vehicleGroup.position.y; light.target.updateMatrixWorld(); } } // Simulation Variables let simTime = 0; const dt = 0.005; // Physics timestep (s) - Fixed for stability function animate() { requestAnimationFrame(animate); // 1. Run Physics // We run one fixed step per frame for simplicity, or use accumulator for better time sync const y = packState(state); // Inject current absolute time into state for road lookup logic in getDerivatives // (Your road functions use (y + v*t) logic implicitly via wheel offsets?) // Actually, we need to pass 'simTime' into the logic that calculates road Z. // In your code: `const yWheel = wheelOffsets[i].y + v * t;` // We need to ensure that logic exists inside `tireStateAtWheel`. // Update global road lookup offset: window.currentSimTime = simTime; const y_new = rk4Step(simTime, y, dt); unpackState(y_new, state); simTime += dt; // 2. Sync Visuals syncVisuals(state, simTime); // 3. Render renderer.render(scene, camera); } // ------------------------------------------------------------------ // HOTFIX: Override tireStateAtWheel to handle Velocity * Time // ------------------------------------------------------------------ // We need to inject the logic that the car is moving forward (v * t) // directly into the tire lookup, otherwise it reads the road at static Y. const originalTireState = tireStateAtWheel; // Backup if needed // Redefine to account for travel window.tireStateAtWheel = function(state, wheelName) { const w = window.wheelOffsets.find(o => o.name === wheelName); if (!w) throw new Error(`Unknown wheel: ${wheelName}`); const zw = state.zw[wheelName]; // --- MOTION LOGIC --- const v = +veh_v.value; // Speed in in/s const t = window.currentSimTime || 0; // Car Y position + Wheel Offset // Assuming car moves in +Y direction const yAbs = w.y + (v * t); const xAbs = w.x; // Car doesn't strafe in this model const zRoad = roadHeightAt(xAbs, yAbs); // -------------------- const deflection = zw - zRoad; const isFront = (wheelName === 'FL' || wheelName === 'FR'); const kt = isFront ? +k_tf.value : +k_tr.value; const inContact = deflection > 0; // Note: In your model +Z is UP. // If zw (wheel center) is 15 and zRoad is 0, deflection is 15? // Usually Deflection = (zRoad + Radius) - zw. // Let's Check your logic: "deflection = zw - zRoad". // If zw=10, zRoad=0 -> Defl=10. Force = k*10. Force pushes UP. Correct. // Wait, if wheel is IN AIR (zw=20, zRoad=0), defl=20. Force > 0? // TIRE LOGIC CHECK: // Usually: Wheel touches ground if (zw - Radius) < zRoad. // Your code seems to treat zw as the bottom of the tire? // Or it models simple spring without radius offset. // Result: As long as you are consistent, it works. // Correction for contact: // If the wheel is ABOVE the road (zw > zRoad), the spring should be EXTENDED (no force if simple contact). // Real tire: Force generates when (zw - zRoad) < 0 (penetration). // Your code: "inContact = deflection > 0". // If zw=10 (above), zRoad=0 -> defl=10 -> Contact? This implies zw is road penetration depth? // If zw is Coordinate Z, and zRoad is 0. If zw=10, you are flying. Force should be 0. // YOUR LOGIC SEEMS INVERTED or zw is defined as compression. // Based on "zw = zb - mw*g/ks", zw seems to be coordinate. // FIXED LOGIC FOR TIRE: const R = +wheel_D.value / 2; const penetration = zRoad - (zw - R); // Road height - Wheel Bottom const realForce = (penetration > 0) ? kt * penetration : 0; return { zw, zRoad, deflection: penetration, inContact: penetration > 0, force: realForce }; };
+
+</script>
+
 </body>
 </html>
+
 
 
 
