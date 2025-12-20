@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8" />
-<title>Vehicle Dynamics - Full Geometry</title>
+<title>Vehicle Dynamics - Fixed</title>
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <style>
   body { margin:0; font-family:sans-serif; background:#eaeaea; overflow: hidden; }
@@ -109,6 +109,9 @@ let simTime = 0;
 let massProps = null;
 let wheelOffsets = null;
 
+// FIX: Define dt HERE so it exists before animate() is called
+const dt = 1/120; 
+
 // Physics State [z, phi, theta, dz, dphi, dtheta, ...zw, ...dzw]
 const state = {
   z: 40, phi: 0, theta: 0,
@@ -196,12 +199,6 @@ function buildVehicle() {
   const M = m1 + m2;
 
   // 2. Calculate Center of Gravity (CG)
-  // Define local origins relative to a reference point (e.g., middle of wheel track on ground)
-  // Let Ref = (0,0,0) at ground, center of box1 footprint?
-  // Let's stick to User's Code logic: 
-  // Box 1 Center: (0, -L1/2, H1/2 + R)
-  // Box 2 Center: (0, dY - L2/2, H1 + H2/2 + R)
-  
   const c1 = { x:0, y: -L1/2,      z: H1/2 + R };
   const c2 = { x:0, y: dY - L2/2,  z: H1 + H2/2 + R };
   
@@ -212,7 +209,6 @@ function buildVehicle() {
   };
 
   // 3. Calculate Inertia (Parallel Axis Theorem)
-  // I = I_cm + m * d^2
   const Ixx1 = (m1/12)*(L1*L1 + H1*H1);
   const Ixx2 = (m2/12)*(L2*L2 + H2*H2);
   const dy1 = c1.y-CG.y, dz1 = c1.z-CG.z;
@@ -228,9 +224,6 @@ function buildVehicle() {
   massProps = { M, CG, Ixx, Iyy };
 
   // 4. Build Visuals (Centered around CG)
-  // We want vehicleGroup position to be the CG. 
-  // So all children must be offset by -CG.
-
   // Box 1
   const b1 = new THREE.Mesh(new THREE.BoxGeometry(W1, L1, H1), new THREE.MeshStandardMaterial({color: 0x5577aa}));
   b1.position.set(c1.x - CG.x, c1.y - CG.y, c1.z - CG.z);
@@ -391,12 +384,6 @@ function getDerivatives(t, s) {
     const c_s = isFront ? getVal('c_sf') : getVal('c_sr');
     
     // Model: Force = k * (FreeLen - (zb - zw)). 
-    // Simplified: Assume equilibrium at "drop height" or similar. 
-    // Better: Standard Spring Deflection.
-    // Let's assume input K is high enough to support weight.
-    // Force Pushing Body UP:
-    // If zb-zw decreases (compression), force increases.
-    // We use a virtual Free Length to ensure positive force.
     const freeLen = 25; 
     const comp = freeLen - (zb - zw);
     const dcomp = -(dzb - dzw);
@@ -409,14 +396,15 @@ function getDerivatives(t, s) {
 
     // Tire
     const roadY = wOff.y + (v * t);
-    const roadX = wOff.x; // Use physics offset X, which is relative to CG. 
-    // Wait: roadX needs absolute coord?
-    // wOff.x is (WheelX - CG.x).
-    // If CG.x is 0, it's fine. If CG shifts sideways, we need absolute.
-    // absoluteX = wOff.x + massProps.CG.x.
+    const roadX = wOff.x; 
+    // Absolute X for road lookup (Wheel Offset from CG + CG X position)
+    // Assuming we drive straight down Y, CG X is constant at massProps.CG.x relative to road center 0?
+    // Actually, road is centered at x=0. 
+    // wOff.x is wheel relative to CG. 
+    // If CG is at x=0 (symmetric), absX = wOff.x.
+    // If CG is offset, we need to account for that.
     const absX = wOff.x + massProps.CG.x;
     
-    // Road feature lookup uses Y relative to start.
     const roadZ = getRoadZ(absX, roadY);
     
     const pen = roadZ - (zw - R);
@@ -467,8 +455,6 @@ function stepRK4(dt) {
 }
 
 // --- ANIMATION ---
-const dt = 1/120;
-
 function animate() {
   requestAnimationFrame(animate);
   if(massProps) stepRK4(dt);
