@@ -2,11 +2,8 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8" />
-<title>Vehicle Dynamics - Accel Plots</title>
+<title>Vehicle Dynamics - Rough Road</title>
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-
-<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-
 <style>
   body { margin:0; font-family:sans-serif; background:#eaeaea; overflow: hidden; }
   #container { display:flex; height:100vh; width: 100vw; flex-direction: column; }
@@ -55,6 +52,7 @@
   }
 }
 </script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 </head>
 
 <body>
@@ -128,9 +126,10 @@
             <option value="full">Full Speed Bump</option>
             <option value="half_L">1/2 Bump (Left)</option>
             <option value="half_R">1/2 Bump (Right)</option>
+            <option value="rough">Rough Dirt Road</option>
           </select>
         </label>
-        <label>Height <span class="units">in</span><input id="feat_H" type="number" value="3"></label>
+        <label>Height/Roughness <span class="units">in</span><input id="feat_H" type="number" value="3"></label>
         <label>Length Y <span class="units">in</span><input id="feat_W" type="number" value="24"></label>
         <label>Location Y <span class="units">in</span><input id="feat_Y" type="number" value="100"></label>
       </div>
@@ -162,9 +161,8 @@ let massProps = null;
 let wheelOffsets = null;
 let isRunning = false;
 
-// Chart Globals
 let chartInstance = null;
-const maxDataPoints = 200; // Keep chart sliding
+const maxDataPoints = 200; 
 let chartUpdateCounter = 0;
 
 const dt = 1/120; 
@@ -203,7 +201,6 @@ function init() {
   controls = new OrbitControls(camera, renderer.domElement);
   controls.enableDamping = true;
   
-  // Lights
   scene.add(new THREE.HemisphereLight(0xffffff, 0x444444, 0.6));
   const dirLight = new THREE.DirectionalLight(0xffffff, 0.8);
   dirLight.position.set(100, -300, 500);
@@ -214,13 +211,11 @@ function init() {
   dirLight.shadow.camera.left = -500; dirLight.shadow.camera.right = 500;
   scene.add(dirLight);
 
-  // Groups
   groundGroup = new THREE.Group();
   scene.add(groundGroup);
   vehicleGroup = new THREE.Group();
   scene.add(vehicleGroup);
 
-  // Floor
   const floor = new THREE.Mesh(
     new THREE.PlaneGeometry(10000, 10000), 
     new THREE.MeshStandardMaterial({ color: 0xbbbbbb, depthWrite: false })
@@ -228,7 +223,6 @@ function init() {
   floor.receiveShadow = true;
   groundGroup.add(floor);
 
-  // Grid
   const grid = new THREE.GridHelper(10000, 100, 0x999999, 0xcccccc);
   grid.rotation.x = Math.PI/2;
   groundGroup.add(grid);
@@ -254,7 +248,7 @@ function initChart() {
   chartInstance = new Chart(ctx, {
     type: 'line',
     data: {
-      labels: [], // Time
+      labels: [],
       datasets: [
         { label: 'CG', borderColor: 'black', ...commonOptions, borderWidth: 3 },
         { label: 'FL', borderColor: 'red', ...commonOptions },
@@ -267,16 +261,16 @@ function initChart() {
     options: {
       responsive: true,
       maintainAspectRatio: false,
-      animation: false, // Performance
+      animation: false,
       plugins: {
-        title: { display: true, text: 'Vertical Acceleration (in/s²)' },
+        title: { display: true, text: 'Vertical Acceleration (G)' },
         legend: { position: 'right', labels: { boxWidth: 10 } }
       },
       scales: {
         x: { display: false },
         y: { 
-          title: { display: true, text: 'Accel' },
-          suggestedMin: -100, suggestedMax: 100 
+          title: { display: true, text: 'G-Force' },
+          suggestedMin: -2, suggestedMax: 2 
         }
       }
     }
@@ -284,50 +278,35 @@ function initChart() {
 }
 
 function updateChartLogic(t, s) {
-  // Only update UI every 5th physics frame to save CPU
   chartUpdateCounter++;
   if(chartUpdateCounter < 5) return;
   chartUpdateCounter = 0;
 
-  // Calculate Accelerations for current state
-  // We need ddz, ddphi, ddtheta
   const d = getDerivatives(t, packState(s));
   const ddz = d[3];
   const ddphi = d[4];
   const ddtheta = d[5];
 
-  // Helper to get Accel at (x,y)
-  // Az = ddz - ddphi*x + ddtheta*y
   const getAcc = (x, y) => ddz - ddphi*x + ddtheta*y;
+  const g = getVal('veh_g'); 
+  const toG = (val) => val / g;
 
-  // 1. CG (0,0)
-  const aCG = ddz;
+  const aCG = toG(ddz);
 
-  // 2. Box 1 Corners
   const L = getVal('box1_L');
   const W = getVal('box1_W');
-  const x = W/2;
-  const y = L/2;
-  
-  // Note: These are relative to CG? No, code inputs are dimensions.
-  // We need coordinates relative to CG.
-  // We calculated CG earlier.
-  // Box 1 center relative to CG:
   const c1x = 0 - massProps.CG.x; 
   const c1y = (-L/2) - massProps.CG.y;
   
-  // Corner Offsets from CG:
-  const FL = getAcc(c1x - W/2, c1y + L/2);
-  const FR = getAcc(c1x + W/2, c1y + L/2);
-  const RL = getAcc(c1x - W/2, c1y - L/2);
-  const RR = getAcc(c1x + W/2, c1y - L/2);
+  const FL = toG(getAcc(c1x - W/2, c1y + L/2));
+  const FR = toG(getAcc(c1x + W/2, c1y + L/2));
+  const RL = toG(getAcc(c1x - W/2, c1y - L/2));
+  const RR = toG(getAcc(c1x + W/2, c1y - L/2));
 
-  // 3. User Point
   const ux = getVal('user_X') - massProps.CG.x;
   const uy = getVal('user_Y') - massProps.CG.y;
-  const aUser = getAcc(ux, uy);
+  const aUser = toG(getAcc(ux, uy));
 
-  // Push Data
   const lbl = t.toFixed(2);
   const chart = chartInstance;
   
@@ -339,7 +318,6 @@ function updateChartLogic(t, s) {
   chart.data.datasets[4].data.push(RR);
   chart.data.datasets[5].data.push(aUser);
 
-  // Shift if too long
   if(chart.data.labels.length > maxDataPoints) {
     chart.data.labels.shift();
     chart.data.datasets.forEach(ds => ds.data.shift());
@@ -360,7 +338,6 @@ function packState(s) {
 function getVal(id) { return parseFloat(document.getElementById(id).value) || 0; }
 function setVal(id, val) { document.getElementById(id).value = val; }
 
-// --- AUTO UPDATE LOGIC ---
 function setupAutoUpdate() {
   const inputs = document.querySelectorAll('.auto-update-group input');
   inputs.forEach(input => {
@@ -370,12 +347,10 @@ function setupAutoUpdate() {
   });
 }
 
-// --- CONTROLS ---
 document.getElementById('solveBtn').onclick = () => { isRunning = true; };
 document.getElementById('stopBtn').onclick = () => { isRunning = false; };
 document.getElementById('updateBtn').onclick = () => buildVehicle(false);
 
-// --- VEHICLE BUILDER ---
 function buildVehicle(isAutoUpdate = false) {
   if(!isAutoUpdate) {
     isRunning = false;
@@ -399,7 +374,6 @@ function buildVehicle(isAutoUpdate = false) {
   const m2 = getVal('box2_Wt') / g;
   const M = m1 + m2;
 
-  // CG
   const c1 = { x:0, y: -L1/2,      z: H1/2 + R };
   const c2 = { x:0, y: dY - L2/2,  z: H1 + H2/2 + R };
   
@@ -409,7 +383,6 @@ function buildVehicle(isAutoUpdate = false) {
     z: (m1*c1.z + m2*c2.z) / M
   };
 
-  // Inertia
   const Ixx1 = (m1/12)*(L1*L1 + H1*H1);
   const Ixx2 = (m2/12)*(L2*L2 + H2*H2);
   const dy1 = c1.y-CG.y, dz1 = c1.z-CG.z;
@@ -424,7 +397,6 @@ function buildVehicle(isAutoUpdate = false) {
 
   massProps = { M, CG, Ixx, Iyy };
 
-  // Visuals
   const b1 = new THREE.Mesh(new THREE.BoxGeometry(W1, L1, H1), new THREE.MeshStandardMaterial({color: 0x5577aa}));
   b1.position.set(c1.x - CG.x, c1.y - CG.y, c1.z - CG.z);
   b1.castShadow = true;
@@ -482,7 +454,7 @@ function addFeatureMesh(geom, color, x, y) {
 document.getElementById('addFeatureBtn').onclick = () => {
   const type = document.getElementById('feat_Type').value;
   const h = getVal('feat_H');
-  const w = getVal('feat_W'); // "Length" in Y direction
+  const w = getVal('feat_W'); // Length in Y
   const y = getVal('feat_Y');
   
   if (type === 'full') {
@@ -491,9 +463,11 @@ document.getElementById('addFeatureBtn').onclick = () => {
     addHalfSpeedBump(h, w, y, 'left');
   } else if (type === 'half_R') {
     addHalfSpeedBump(h, w, y, 'right');
+  } else if (type === 'rough') {
+    addRoughPatch(h, w, y);
   }
   
-  setVal('feat_Y', y + 100);
+  setVal('feat_Y', y + (type==='rough' ? w + 50 : 100));
 };
 
 function addSpeedBump(h, w, y) {
@@ -526,12 +500,34 @@ function addHalfSpeedBump(h, w, y, side) {
   refreshFeatures();
 }
 
+function addRoughPatch(h, w, y) {
+  // Visual: Brown plane
+  const carWidth = getVal('box1_W');
+  const geom = new THREE.PlaneGeometry(carWidth * 2, w);
+  // PlaneGeometry is created at origin. Rotate flat.
+  geom.rotateX(-Math.PI/2); // Facing Up.
+  // Center is at 0,0. We need to move it to y + w/2? 
+  // No, input y usually means "start".
+  // Plane center will be at y + w/2.
+  // Z up a tiny bit to avoid z-fighting
+  const mesh = new THREE.Mesh(geom, new THREE.MeshStandardMaterial({color: 0x8B4513}));
+  mesh.position.set(0, y, 0.5); // Start visual at y? No, center at y.
+  // Wait, standard bump inputs use y as CENTER usually.
+  // Let's stick to Y = Center of feature.
+  mesh.position.set(0, y, 0.5);
+  groundGroup.add(mesh);
+  
+  roadFeatures.push({id: nextFeatureId++, type:'rough', params:{h,w,y}, mesh});
+  refreshFeatures();
+}
+
 function refreshFeatures() {
   const div = document.getElementById('featureList');
   div.innerHTML = roadFeatures.map((f,i) => {
-    let desc = f.type === 'bump' ? 'Full' : (f.params.side === 'left' ? '½L' : '½R');
+    let desc = f.type;
+    if(f.type==='half-bump') desc = f.params.side==='left' ? '½L' : '½R';
     return `<div>
-       <span><b>${desc}</b> @${f.params.y.toFixed(0)} (H:${f.params.h})</span>
+       <span><b>${desc}</b> @${f.params.y.toFixed(0)}</span>
        <button onclick="window.delFeat(${i})">x</button>
      </div>`;
   }).join('');
@@ -546,6 +542,37 @@ window.delFeat = (i) => {
 function getRoadZ(x, y) {
   let z = 0;
   for(let f of roadFeatures) {
+    
+    // ROUGH PATCH
+    if(f.type === 'rough') {
+      // Box check: y within [center - w/2, center + w/2]
+      if (y >= (f.params.y - f.params.w/2) && y <= (f.params.y + f.params.w/2)) {
+        // Deterministic Noise using sum of sines
+        // h is Amplitude.
+        // Frequencies chosen to look like rough terrain
+        const rough = f.params.h * (
+          0.5 * Math.sin(0.1 * y) * Math.sin(0.1 * x) +
+          0.3 * Math.sin(0.3 * y + 1.2) +
+          0.2 * Math.sin(0.5 * x + 0.5 * y)
+        );
+        // We add roughness to base Z? Or replace? 
+        // Bumps usually take max. Roughness usually adds to terrain.
+        // Let's assume roughness is ON TOP of flat ground (0).
+        // Since noise can be negative, let's offset it or take ABS if we want "rocks".
+        // Let's just return the noise (shifted up so min is ~0 if needed, or allow pits).
+        // Allowing pits (negative Z) is fine.
+        // But we want to mix with bumps? 
+        // Max(z, rough) might hide pits.
+        // Let's add roughness effect.
+        // Simple: just set z = rough. 
+        // If there's a bump AND rough road? Edge case.
+        // Let's replace Z with roughness if in zone.
+        z = rough;
+      }
+      continue;
+    }
+
+    // BUMPS
     const dy = y - f.params.y;
     const r = f.params.w/2;
     if(Math.abs(dy) < r) {
@@ -553,7 +580,8 @@ function getRoadZ(x, y) {
         if(f.params.side === 'left' && x > 0) continue;
         if(f.params.side === 'right' && x < 0) continue;
       }
-      z = Math.max(z, f.params.h * Math.sqrt(1 - (dy*dy)/(r*r)));
+      const bumpH = f.params.h * Math.sqrt(1 - (dy*dy)/(r*r));
+      z = Math.max(z, bumpH);
     }
   }
   return z;
@@ -581,7 +609,6 @@ function getDerivatives(t, s_arr) {
     const zw = s_arr[6+i];
     const dzw = s_arr[10+i];
 
-    // Suspension
     const zb = z - phi*wOff.x + theta*wOff.y;
     const dzb = dz - dphi*wOff.x + dtheta*wOff.y;
     
@@ -598,7 +625,6 @@ function getDerivatives(t, s_arr) {
     Tx += F_susp * wOff.y;
     Ty -= F_susp * wOff.x;
 
-    // Tire
     const roadY = wOff.y + (v * t);
     const absX = wOff.x + massProps.CG.x;
     const roadZ = getRoadZ(absX, roadY);
@@ -607,7 +633,6 @@ function getDerivatives(t, s_arr) {
     const k_t = isFront ? getVal('k_tf') : getVal('k_tr');
     const F_tire = (pen > 0) ? k_t * pen : 0;
 
-    // Wheel Accel
     ddzw[i] = (F_tire - F_susp - wm*g) / wm;
   });
 
@@ -645,7 +670,6 @@ function stepRK4(dt) {
   simTime += dt;
 }
 
-// --- ANIMATION ---
 function animate() {
   requestAnimationFrame(animate);
   
@@ -654,15 +678,12 @@ function animate() {
     updateChartLogic(simTime, state);
   }
   
-  // Sync Visuals
   vehicleGroup.position.set(0, 0, state.z);
   vehicleGroup.rotation.set(state.theta, state.phi, 0);
 
-  // Move Ground
   const dist = getVal('veh_v') * simTime;
   groundGroup.position.y = -dist;
 
-  // Move Wheels (Locally)
   if(wheelOffsets) {
     const names = ['FL','FR','RL','RR'];
     names.forEach(n => {
