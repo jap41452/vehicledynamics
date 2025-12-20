@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8" />
-<title>Vehicle Dynamics - Auto Update & Align</title>
+<title>Vehicle Dynamics - Aligned Features</title>
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <style>
   body { margin:0; font-family:sans-serif; background:#eaeaea; overflow: hidden; }
@@ -16,7 +16,6 @@
   input[type="number"], select { width:100%; padding:4px; font-size:11px; border:1px solid #ccc; border-radius: 3px; box-sizing: border-box;}
   .units { float:right; font-size:9px; color:#999; }
   
-  /* Button Styles */
   button { width:100%; margin-top:5px; padding:8px; font-size:11px; cursor:pointer; background: #e0e0e0; border: 1px solid #bbb; border-radius: 3px; transition: background 0.2s; }
   button:hover { background: #d0d0d0; }
   
@@ -213,13 +212,10 @@ function setVal(id, val) { document.getElementById(id).value = val; }
 
 // --- AUTO UPDATE LOGIC ---
 function setupAutoUpdate() {
-  // Select all inputs inside the "auto-update-group" div
   const inputs = document.querySelectorAll('.auto-update-group input');
   inputs.forEach(input => {
-    // 'input' event fires immediately when typing/spinner changes
     input.addEventListener('input', () => {
-      // Rebuild model but do not reset simulation running state (unless necessary)
-      buildVehicle(true); // pass true to indicate it's an auto-update
+      buildVehicle(true); 
     });
   });
 }
@@ -227,13 +223,10 @@ function setupAutoUpdate() {
 // --- CONTROLS ---
 document.getElementById('solveBtn').onclick = () => { isRunning = true; };
 document.getElementById('stopBtn').onclick = () => { isRunning = false; };
-document.getElementById('updateBtn').onclick = () => buildVehicle(false); // Manual reset
+document.getElementById('updateBtn').onclick = () => buildVehicle(false);
 
 // --- VEHICLE BUILDER ---
 function buildVehicle(isAutoUpdate = false) {
-  // Only stop simulation if manual reset. If auto-updating, we can keep "running" logic
-  // but usually changing mass/geometry mid-sim causes explosions. 
-  // Safer to pause or reset. Let's reset sim time if manual.
   if(!isAutoUpdate) {
     isRunning = false;
     simTime = 0;
@@ -314,7 +307,6 @@ function buildVehicle(isAutoUpdate = false) {
     vehicleGroup.add(mesh);
   });
 
-  // Reset Physics State if Manual or First Load
   if(!isAutoUpdate || simTime === 0) {
     state.z = CG.z + 20; 
     state.phi = 0; state.theta = 0;
@@ -346,21 +338,25 @@ document.getElementById('addFeatureBtn').onclick = () => {
     addHalfSpeedBump(h, w, y, 'right');
   }
   
-  // Auto-increment location for next add
   setVal('feat_Y', y + 100);
 };
 
 function addSpeedBump(h, w, y) {
-  // Full Bump: Always spans the vehicle width + extra
+  // Full Bump: Center at X=0, Width = CarWidth * 3
   const carWidth = getVal('box1_W');
-  const W = carWidth * 3; // Ensure it covers track width easily
+  const W = carWidth * 3; 
   const r = w/2;
   const shape = new THREE.Shape();
   shape.moveTo(-r,0); shape.absarc(0,0,r,0,Math.PI,false); shape.lineTo(r,0);
   const geom = new THREE.ExtrudeGeometry(shape, {depth:W, bevelEnabled:false});
-  geom.rotateX(Math.PI/2); geom.rotateZ(Math.PI/2);
   
-  // Center at X=0
+  // FIX: Center the geometry!
+  geom.translate(0, 0, -W/2);
+  
+  geom.rotateX(Math.PI/2); 
+  geom.rotateZ(Math.PI/2);
+  
+  // Position at X=0
   const mesh = addFeatureMesh(geom, 0x888888, 0, y);
   
   roadFeatures.push({id: nextFeatureId++, type:'bump', params:{h,w,y}, mesh});
@@ -368,21 +364,23 @@ function addSpeedBump(h, w, y) {
 }
 
 function addHalfSpeedBump(h, w, y, side) {
-  // Half Bump: Needs to align with the specific wheel track
+  // Half Bump: Center at +/- (CarWidth/2)
   const carWidth = getVal('box1_W');
-  const trackX = carWidth / 2; // Roughly where wheels are
+  const trackX = carWidth / 2; // Roughly wheel center
   
-  // Visual width of the bump (narrower than full)
   const bumpLatWidth = carWidth * 0.4; 
   
   const r = w/2;
   const shape = new THREE.Shape();
   shape.moveTo(-r,0); shape.absarc(0,0,r,0,Math.PI,false); shape.lineTo(r,0);
   const geom = new THREE.ExtrudeGeometry(shape, {depth:bumpLatWidth, bevelEnabled:false});
-  geom.rotateX(Math.PI/2); geom.rotateZ(Math.PI/2);
   
-  // Calculate X offset
-  // Left Wheel is at -trackX. Right Wheel is at +trackX.
+  // FIX: Center the geometry!
+  geom.translate(0, 0, -bumpLatWidth/2);
+  
+  geom.rotateX(Math.PI/2); 
+  geom.rotateZ(Math.PI/2);
+  
   const xOff = (side==='left' ? -trackX : trackX);
   
   const mesh = addFeatureMesh(geom, 0x777777, xOff, y);
@@ -414,9 +412,6 @@ function getRoadZ(x, y) {
     const r = f.params.w/2;
     if(Math.abs(dy) < r) {
       if(f.type === 'half-bump') {
-        // Robust Filtering:
-        // Left bump only affects wheels on Left (x < 0)
-        // Right bump only affects wheels on Right (x > 0)
         if(f.params.side === 'left' && x > 0) continue;
         if(f.params.side === 'right' && x < 0) continue;
       }
