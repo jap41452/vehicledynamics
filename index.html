@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8" />
-<title>Vehicle Dynamics - 3D Rough Road</title>
+<title>Vehicle Dynamics - 3D Rough Road Fixed</title>
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
@@ -133,7 +133,7 @@
         </label>
         <label>Height/Roughness <span class="units">in</span><input id="feat_H" type="number" value="3"></label>
         <label>Length Y <span class="units">in</span><input id="feat_W" type="number" value="200"></label>
-        <label>Location Y <span class="units">in</span><input id="feat_Y" type="number" value="200"></label>
+        <label>Location Y <span class="units">in</span><input id="feat_Y" type="number" value="100"></label>
       </div>
       <button id="addFeatureBtn">+ Add Feature</button>
       
@@ -163,7 +163,6 @@ let massProps = null;
 let wheelOffsets = null;
 let isRunning = false;
 
-// Chart Globals
 let chartInstance = null;
 const maxDataPoints = 200; 
 let chartUpdateCounter = 0;
@@ -204,7 +203,6 @@ function init() {
   controls = new OrbitControls(camera, renderer.domElement);
   controls.enableDamping = true;
   
-  // Lights
   scene.add(new THREE.HemisphereLight(0xffffff, 0x444444, 0.6));
   const dirLight = new THREE.DirectionalLight(0xffffff, 0.8);
   dirLight.position.set(100, -300, 500);
@@ -215,13 +213,11 @@ function init() {
   dirLight.shadow.camera.left = -500; dirLight.shadow.camera.right = 500;
   scene.add(dirLight);
 
-  // Groups
   groundGroup = new THREE.Group();
   scene.add(groundGroup);
   vehicleGroup = new THREE.Group();
   scene.add(vehicleGroup);
 
-  // Floor
   const floor = new THREE.Mesh(
     new THREE.PlaneGeometry(10000, 10000), 
     new THREE.MeshStandardMaterial({ color: 0xbbbbbb, depthWrite: false })
@@ -229,7 +225,6 @@ function init() {
   floor.receiveShadow = true;
   groundGroup.add(floor);
 
-  // Grid
   const grid = new THREE.GridHelper(10000, 100, 0x999999, 0xcccccc);
   grid.rotation.x = Math.PI/2;
   groundGroup.add(grid);
@@ -511,22 +506,18 @@ function addRoughPatch(h, w, y) {
   const carWidth = getVal('box1_W');
   const width = carWidth * 3; 
   
-  // Create rough geometry
+  // FIX: Do NOT rotate -90. Plane is already XY (Ground)
   const segmentsW = 20;
   const segmentsH = Math.max(5, Math.floor(w / 10));
   const geom = new THREE.PlaneGeometry(width, w, segmentsW, segmentsH);
   
-  // Randomize Vertices for 3D look
   const pos = geom.attributes.position;
   for(let i=0; i<pos.count; i++) {
     const z = pos.getZ(i);
-    // Perturb height
+    // Perturb Z (Height)
     pos.setZ(i, z + (Math.random()-0.5)*2.0);
   }
   geom.computeVertexNormals();
-  
-  // Rotate to lie flat (Plane is XY, we want XZ)
-  geom.rotateX(-Math.PI/2);
   
   const mat = new THREE.MeshStandardMaterial({
     color: 0x8B4513, 
@@ -535,7 +526,6 @@ function addRoughPatch(h, w, y) {
   });
   const mesh = new THREE.Mesh(geom, mat);
   
-  // Center at Y
   mesh.position.set(0, y, 0.5);
   groundGroup.add(mesh);
   
@@ -572,10 +562,6 @@ function getRoadZ(x, y) {
       const startY = f.params.y - w/2;
       const endY = f.params.y + w/2;
       
-      const width = getVal('box1_W') * 3; // Visual width
-      const minX = -width/2; 
-      const maxX = width/2;
-
       if (y >= startY && y <= endY) {
         // Deterministic Noise
         const rough = f.params.h * (
