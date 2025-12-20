@@ -1,258 +1,227 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8" />
-<title>Vehicle Geometry Viewer</title>
-<meta name="viewport" content="width=device-width, initial-scale=1.0" />
-
-<script type="importmap">
-{
-  "imports": {
-    "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js"
-  }
-}
-</script>
-
-<script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
-
-<style>
-body { margin:0; font-family:system-ui; background:#eaeaea; }
-#container { display:flex; height:100vh; }
-#ui { width:300px; padding:10px; background:#fff; border-right:1px solid #ccc; overflow-y:auto; }
-#viewer { flex:1; }
-h2{font-size:14px;margin:0 0 8px;}
-h3{font-size:12px;margin:10px 0 4px;border-bottom:1px solid #ddd;}
-.grid2{display:grid;grid-template-columns:1fr 1fr;gap:6px 8px;}
-label{font-size:11px;}
-input{width:100%;padding:4px;font-size:11px;}
-button{width:100%;margin-top:8px;padding:6px;font-size:12px;}
-.readout{font-size:11px;background:#fafafa;border:1px solid #ddd;padding:6px;border-radius:6px;}
-.row{display:flex;justify-content:space-between;}
-</style>
+    <meta charset="UTF-8">
+    <title>Vehicle Dynamics Module</title>
+    <style>
+        body { margin: 0; overflow: hidden; }
+        #info {
+            position: absolute; top: 10px; left: 10px; color: white; 
+            font-family: monospace; background: rgba(0,0,0,0.5); padding: 10px;
+        }
+    </style>
 </head>
-
 <body>
-<div id="container">
-<div id="ui">
+    <div id="info">
+        <b>Vehicle Dynamics Module</b><br>
+        WASD to Drive<br>
+        Space to Brake
+    </div>
 
-<h2>Vehicle Geometry</h2>
+    <script type="importmap">
+        {
+            "imports": {
+                "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+                "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/",
+                "cannon-es": "https://unpkg.com/cannon-es@0.20.0/dist/cannon-es.js"
+            }
+        }
+    </script>
 
-<h3>Box 1</h3>
-<div class="grid2">
-<label>Length<input id="box1_L" type="number" value="120"></label>
-<label>Width<input id="box1_W" type="number" value="72"></label>
-<label>Height<input id="box1_H" type="number" value="24"></label>
-<label>Weight<input id="box1_Wt" type="number" value="2500"></label>
-</div>
+    <script type="module">
+        import * as THREE from 'three';
+        import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+        import * as CANNON from 'cannon-es';
 
-<h3>Box 2</h3>
-<div class="grid2">
-<label>Length<input id="box2_L" type="number" value="60"></label>
-<label>Width<input id="box2_W" type="number" value="60"></label>
-<label>Height<input id="box2_H" type="number" value="20"></label>
-<label>Weight<input id="box2_Wt" type="number" value="800"></label>
-<label>Front Offset<input id="box2_dY" type="number" value="0"></label>
-</div>
+        // --- CONFIGURATION: SUSPENSION DYNAMICS ---
+        // This is where you tune the "response" of the vehicle
+        const vehicleConfig = {
+            mass: 150, // kg
+            suspensionStiffness: 30,
+            suspensionRestLength: 0.3,
+            frictionSlip: 1.4,
+            dampingRelaxation: 2.3,
+            dampingCompression: 4.4,
+            maxSuspensionForce: 100000,
+            rollInfluence: 0.01, // Lower prevents rollover at high speed
+            radius: 0.25 // Wheel radius
+        };
 
-<h3>Wheels</h3>
-<div class="grid2">
-<label>Diameter<input id="wheel_D" type="number" value="32"></label>
-<label>Weight<input id="wheel_Wt" type="number" value="120"></label>
-<label>Front Y<input id="wheel_Yf" type="number" value="-20"></label>
-<label>Rear Spacing<input id="wheel_dYr" type="number" value="80"></label>
-</div>
+        // --- 1. SCENE SETUP ---
+        const scene = new THREE.Scene();
+        scene.background = new THREE.Color(0x333333);
 
-<h3>Suspension</h3>
-<div class="grid2">
-<label>Front k<input id="k_sf" type="number" value="300"></label>
-<label>Front c<input id="c_sf" type="number" value="25"></label>
-<label>Rear k<input id="k_sr" type="number" value="350"></label>
-<label>Rear c<input id="c_sr" type="number" value="30"></label>
-</div>
+        const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 100);
+        camera.position.set(0, 5, 10);
 
-<h3>Tires</h3>
-<div class="grid2">
-<label>Front k<input id="k_tf" type="number" value="1200"></label>
-<label>Rear k<input id="k_tr" type="number" value="1400"></label>
-</div>
+        const renderer = new THREE.WebGLRenderer({ antialias: true });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.shadowMap.enabled = true;
+        document.body.appendChild(renderer.domElement);
 
-<h3>Simulation</h3>
-<div class="grid2">
-<label>Speed<input id="veh_v" type="number" value="120"></label>
-<label>Gravity<input id="veh_g" type="number" value="386.09"></label>
-</div>
+        const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
+        scene.add(ambientLight);
+        const dirLight = new THREE.DirectionalLight(0xffffff, 1);
+        dirLight.position.set(10, 20, 10);
+        dirLight.castShadow = true;
+        scene.add(dirLight);
 
-<button id="updateBtn">Update Vehicle</button>
+        // --- 2. PHYSICS WORLD ---
+        const world = new CANNON.World();
+        world.gravity.set(0, -9.82, 0);
+        world.broadphase = new CANNON.SAPBroadphase(world);
 
-<h3>Road</h3>
-<button id="addBumpBtn">Add Speed Bump</button>
-<button id="addHalfBumpBtn">Add 1/2 Speed Bump</button>
-<div id="featureList"></div>
+        // Physics Materials
+        const groundMaterial = new CANNON.Material('ground');
+        const wheelMaterial = new CANNON.Material('wheel');
+        const wheelGroundContact = new CANNON.ContactMaterial(wheelMaterial, groundMaterial, {
+            friction: 0.3,
+            restitution: 0,
+            contactEquationStiffness: 1000
+        });
+        world.addContactMaterial(wheelGroundContact);
 
-</div>
-<div id="viewer"></div>
-</div>
+        // Ground Plane
+        const groundBody = new CANNON.Body({
+            mass: 0, // 0 makes it static
+            material: groundMaterial
+        });
+        groundBody.addShape(new CANNON.Plane());
+        groundBody.quaternion.setFromEuler(-Math.PI / 2, 0, 0);
+        world.addBody(groundBody);
 
-<script type="module">
-import * as THREE from 'three';
-import { OrbitControls } from 'https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/controls/OrbitControls.js';
+        // Visual Ground
+        const gridHelper = new THREE.GridHelper(100, 100);
+        scene.add(gridHelper);
 
-/* =================== CORE DATA =================== */
+        // --- 3. VEHICLE SETUP ---
+        // Chassis Body
+        const chassisShape = new CANNON.Box(new CANNON.Vec3(1, 0.25, 2)); // Half extents
+        const chassisBody = new CANNON.Body({ mass: vehicleConfig.mass });
+        chassisBody.addShape(chassisShape);
+        chassisBody.position.set(0, 2, 0);
+        chassisBody.angularDamping = 0.5;
+        
+        // Visual Chassis
+        const chassisMesh = new THREE.Mesh(
+            new THREE.BoxGeometry(2, 0.5, 4),
+            new THREE.MeshStandardMaterial({ color: 0x0077ff })
+        );
+        chassisMesh.castShadow = true;
+        scene.add(chassisMesh);
 
-let scene, camera, renderer, controls;
-let vehicleGroup = new THREE.Group();
-let groundGroup  = new THREE.Group();
-let roadFeatures = [];
+        // RaycastVehicle Controller
+        const vehicle = new CANNON.RaycastVehicle({
+            chassisBody: chassisBody,
+        });
 
-const state = {
-  z:0, phi:0, theta:0,
-  dz:0, dphi:0, dtheta:0,
-  zw:{FL:0,FR:0,RL:0,RR:0},
-  dzw:{FL:0,FR:0,RL:0,RR:0}
-};
+        const wheelOptions = {
+            radius: vehicleConfig.radius,
+            directionLocal: new CANNON.Vec3(0, -1, 0),
+            suspensionStiffness: vehicleConfig.suspensionStiffness,
+            suspensionRestLength: vehicleConfig.suspensionRestLength,
+            frictionSlip: vehicleConfig.frictionSlip,
+            dampingRelaxation: vehicleConfig.dampingRelaxation,
+            dampingCompression: vehicleConfig.dampingCompression,
+            maxSuspensionForce: vehicleConfig.maxSuspensionForce,
+            isFrontWheel: true,
+            useCustomSlidingRotationalSpeed: true,
+            customSlidingRotationalSpeed: -30,
+            axleLocal: new CANNON.Vec3(-1, 0, 0)
+        };
 
-/* =================== INITIALIZATION =================== */
+        // Add Wheels (Front Left, Front Right, Back Left, Back Right)
+        // Note: x is left/right, y is up/down, z is forward/back
+        vehicle.addWheel({ ...wheelOptions, chassisConnectionPointLocal: new CANNON.Vec3(0.8, 0, 1.2) });
+        vehicle.addWheel({ ...wheelOptions, chassisConnectionPointLocal: new CANNON.Vec3(-0.8, 0, 1.2) });
+        vehicle.addWheel({ ...wheelOptions, isFrontWheel: false, chassisConnectionPointLocal: new CANNON.Vec3(0.8, 0, -1.2) });
+        vehicle.addWheel({ ...wheelOptions, isFrontWheel: false, chassisConnectionPointLocal: new CANNON.Vec3(-0.8, 0, -1.2) });
 
-init();
-buildVehicle();
+        vehicle.addToWorld(world);
 
-/* =================== THREE =================== */
+        // Visual Wheels
+        const wheelMeshes = [];
+        vehicle.wheelInfos.forEach((wheel) => {
+            const cylinderGeo = new THREE.CylinderGeometry(wheel.radius, wheel.radius, 0.3, 20);
+            cylinderGeo.rotateZ(Math.PI / 2); // Rotate to correct axis
+            const mesh = new THREE.Mesh(cylinderGeo, new THREE.MeshStandardMaterial({ color: 0x333333 }));
+            scene.add(mesh);
+            wheelMeshes.push(mesh);
+        });
 
-function init(){
-  THREE.Object3D.DEFAULT_UP.set(0,0,1);
-  scene=new THREE.Scene();
-  scene.background=new THREE.Color(0xf0f0f0);
+        // --- 4. INPUT HANDLING ---
+        const keys = { w: false, a: false, s: false, d: false, space: false };
+        document.addEventListener('keydown', (e) => {
+            if(e.key === ' ') keys.space = true;
+            if(e.key.toLowerCase() in keys) keys[e.key.toLowerCase()] = true;
+        });
+        document.addEventListener('keyup', (e) => {
+            if(e.key === ' ') keys.space = false;
+            if(e.key.toLowerCase() in keys) keys[e.key.toLowerCase()] = false;
+        });
 
-  camera=new THREE.PerspectiveCamera(45,1,0.1,5000);
-  camera.position.set(300,-500,300);
+        // --- 5. ANIMATION LOOP ---
+        const timeStep = 1 / 60;
+        
+        function animate() {
+            requestAnimationFrame(animate);
 
-  renderer=new THREE.WebGLRenderer({antialias:true});
-  viewer.appendChild(renderer.domElement);
+            // Update Physics Inputs
+            const maxSteerVal = 0.5;
+            const maxForce = 500;
+            const brakeForce = 20;
 
-  controls=new OrbitControls(camera,renderer.domElement);
-  controls.enableDamping=true;
+            // Steering
+            vehicle.setSteeringValue(keys.a ? maxSteerVal : (keys.d ? -maxSteerVal : 0), 0);
+            vehicle.setSteeringValue(keys.a ? maxSteerVal : (keys.d ? -maxSteerVal : 0), 1);
 
-  scene.add(new THREE.AmbientLight(0xffffff,0.6));
-  const dl=new THREE.DirectionalLight(0xffffff,0.8);
-  dl.position.set(200,-200,400);
-  scene.add(dl);
+            // Engine
+            const engineForce = keys.w ? -maxForce : (keys.s ? maxForce : 0);
+            vehicle.applyEngineForce(engineForce, 2);
+            vehicle.applyEngineForce(engineForce, 3);
 
-  scene.add(vehicleGroup);
-  scene.add(groundGroup);
+            // Brakes
+            const currentBrake = keys.space ? brakeForce : 0;
+            vehicle.setBrake(currentBrake, 0);
+            vehicle.setBrake(currentBrake, 1);
+            vehicle.setBrake(currentBrake, 2);
+            vehicle.setBrake(currentBrake, 3);
 
-  animate();
-}
+            // Step Physics
+            world.step(timeStep);
 
-function animate(){
-  requestAnimationFrame(animate);
-  renderer.setSize(viewer.clientWidth,viewer.clientHeight);
-  camera.aspect=viewer.clientWidth/viewer.clientHeight;
-  camera.updateProjectionMatrix();
-  renderer.render(scene,camera);
-}
+            // Sync Visuals to Physics
+            // Chassis
+            chassisMesh.position.copy(chassisBody.position);
+            chassisMesh.quaternion.copy(chassisBody.quaternion);
 
-/* =================== VEHICLE BUILD =================== */
+            // Wheels
+            for (let i = 0; i < vehicle.wheelInfos.length; i++) {
+                vehicle.updateWheelTransform(i);
+                const transform = vehicle.wheelInfos[i].worldTransform;
+                wheelMeshes[i].position.copy(transform.position);
+                wheelMeshes[i].quaternion.copy(transform.quaternion);
+            }
 
-function buildVehicle(){
-  vehicleGroup.clear();
-  groundGroup.clear();
+            // Camera Follow
+            camera.position.x = chassisMesh.position.x + 5;
+            camera.position.z = chassisMesh.position.z + 5;
+            camera.lookAt(chassisMesh.position);
 
-  const L1=+box1_L.value, W1=+box1_W.value, H1=+box1_H.value;
-  const R=+wheel_D.value/2;
+            renderer.render(scene, camera);
+        }
 
-  const box1=new THREE.Mesh(
-    new THREE.BoxGeometry(W1,L1,H1),
-    new THREE.MeshStandardMaterial({color:0x555555})
-  );
-  box1.position.set(0,-L1/2,H1/2+R);
-  vehicleGroup.add(box1);
+        animate();
 
-  computeMassProps(box1);
-  computeWheelOffsets();
-  initStaticEquilibrium(state);
-}
-
-/* =================== MASS PROPS =================== */
-
-function computeMassProps(box){
-  const g=386.09;
-  const M=(+box1_Wt.value)/g;
-  window.massProps={
-    M,
-    CG:{x:0,y:box.position.y,z:box.position.z},
-    I:{Ixx:M*1000,Iyy:M*1000}
-  };
-}
-
-/* =================== WHEELS =================== */
-
-function computeWheelOffsets(){
-  const W=+box1_W.value;
-  const yF=+wheel_Yf.value;
-  const yR=yF-+wheel_dYr.value;
-  window.wheelOffsets=[
-    {name:'FL',x:-W/2,y:yF},
-    {name:'FR',x: W/2,y:yF},
-    {name:'RL',x:-W/2,y:yR},
-    {name:'RR',x: W/2,y:yR}
-  ];
-}
-
-/* =================== ROAD =================== */
-
-function roadHeightAt(x,y){
-  let z=0;
-  for(const f of roadFeatures){
-    if(f.type==='bump') z=Math.max(z,evalBump(f.params,y));
-  }
-  return z;
-}
-
-function evalBump(p,y){
-  const r=p.w/2;
-  const dy=y-p.y;
-  if(Math.abs(dy)>r) return 0;
-  return p.h*Math.sqrt(1-(dy*dy)/(r*r));
-}
-
-/* =================== STATICS =================== */
-
-function bodyZatWheel(state,name){
-  const w=wheelOffsets.find(o=>o.name===name);
-  return state.z-state.phi*w.x+state.theta*w.y;
-}
-
-function initStaticEquilibrium(state){
-  const g=+veh_g.value;
-  const ksF=+k_sf.value, ksR=+k_sr.value;
-  const ktF=+k_tf.value, ktR=+k_tr.value;
-  const mw=(+wheel_Wt.value)/g;
-
-  let z=10;
-  for(let i=0;i<20;i++){
-    let sum=0;
-    for(const n of ['FL','FR','RL','RR']){
-      const isF=n[0]==='F';
-      const ks=isF?ksF:ksR;
-      const kt=isF?ktF:ktR;
-      const zb=z;
-      const zw=(mw*g-ks*zb)/(kt-ks);
-      sum+=ks*(zb-zw);
-      state.zw[n]=zw;
-    }
-    z+=(sum-window.massProps.M*g)/(ksF*2+ksR*2);
-  }
-  state.z=z;
-}
-
-/* =================== UI =================== */
-
-updateBtn.onclick=buildVehicle;
-
-</script>
+        // Handle Window Resize
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        });
+    </script>
 </body>
 </html>
-
 
 
 
