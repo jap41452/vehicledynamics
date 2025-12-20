@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8" />
-<title>Vehicle Dynamics - Custom Road</title>
+<title>Vehicle Dynamics - Auto Update & Align</title>
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <style>
   body { margin:0; font-family:sans-serif; background:#eaeaea; overflow: hidden; }
@@ -47,29 +47,31 @@
 <div id="container">
 
 <div id="ui">
-  <h3>Box 1 (Chassis)</h3>
-  <div class="grid2">
-    <label>Length (Y) <span class="units">in</span><input id="box1_L" type="number" value="120"></label>
-    <label>Width (X)  <span class="units">in</span><input id="box1_W" type="number" value="72"></label>
-    <label>Height (Z) <span class="units">in</span><input id="box1_H" type="number" value="24"></label>
-    <label>Weight     <span class="units">lb</span><input id="box1_Wt" type="number" value="2500"></label>
-  </div>
+  <div class="auto-update-group">
+    <h3>Box 1 (Chassis)</h3>
+    <div class="grid2">
+      <label>Length (Y) <span class="units">in</span><input id="box1_L" type="number" value="120"></label>
+      <label>Width (X)  <span class="units">in</span><input id="box1_W" type="number" value="72"></label>
+      <label>Height (Z) <span class="units">in</span><input id="box1_H" type="number" value="24"></label>
+      <label>Weight     <span class="units">lb</span><input id="box1_Wt" type="number" value="2500"></label>
+    </div>
 
-  <h3>Box 2 (Cab/Cargo)</h3>
-  <div class="grid2">
-    <label>Length (Y) <span class="units">in</span><input id="box2_L" type="number" value="60"></label>
-    <label>Width (X)  <span class="units">in</span><input id="box2_W" type="number" value="60"></label>
-    <label>Height (Z) <span class="units">in</span><input id="box2_H" type="number" value="20"></label>
-    <label>Weight     <span class="units">lb</span><input id="box2_Wt" type="number" value="800"></label>
-    <label>Front Offset (Y) <span class="units">in</span><input id="box2_dY" type="number" value="0"></label>
-  </div>
+    <h3>Box 2 (Cab/Cargo)</h3>
+    <div class="grid2">
+      <label>Length (Y) <span class="units">in</span><input id="box2_L" type="number" value="60"></label>
+      <label>Width (X)  <span class="units">in</span><input id="box2_W" type="number" value="60"></label>
+      <label>Height (Z) <span class="units">in</span><input id="box2_H" type="number" value="20"></label>
+      <label>Weight     <span class="units">lb</span><input id="box2_Wt" type="number" value="800"></label>
+      <label>Front Offset (Y) <span class="units">in</span><input id="box2_dY" type="number" value="0"></label>
+    </div>
 
-  <h3>Wheels</h3>
-  <div class="grid2">
-    <label>Diameter <span class="units">in</span><input id="wheel_D" type="number" value="32"></label>
-    <label>Weight   <span class="units">lb</span><input id="wheel_Wt" type="number" value="120"></label>
-    <label>Front Y  <span class="units">in</span><input id="wheel_Yf" type="number" value="-20"></label>
-    <label>Rear Spacing <span class="units">in</span><input id="wheel_dYr" type="number" value="80"></label>
+    <h3>Wheels</h3>
+    <div class="grid2">
+      <label>Diameter <span class="units">in</span><input id="wheel_D" type="number" value="32"></label>
+      <label>Weight   <span class="units">lb</span><input id="wheel_Wt" type="number" value="120"></label>
+      <label>Front Y  <span class="units">in</span><input id="wheel_Yf" type="number" value="-20"></label>
+      <label>Rear Spacing <span class="units">in</span><input id="wheel_dYr" type="number" value="80"></label>
+    </div>
   </div>
 
   <h3>Suspension</h3>
@@ -96,7 +98,7 @@
     <button id="solveBtn">► Solve</button>
     <button id="stopBtn">■ Stop</button>
   </div>
-  <button id="updateBtn">Reset / Update Vehicle</button>
+  <button id="updateBtn">Reset / Center Vehicle</button>
 
   <h3>Road Feature Settings</h3>
   <div class="grid2">
@@ -147,6 +149,7 @@ const state = {
 // --- INITIALIZATION ---
 init();
 buildVehicle();
+setupAutoUpdate();
 animate();
 
 function init() {
@@ -208,13 +211,34 @@ function init() {
 function getVal(id) { return parseFloat(document.getElementById(id).value) || 0; }
 function setVal(id, val) { document.getElementById(id).value = val; }
 
+// --- AUTO UPDATE LOGIC ---
+function setupAutoUpdate() {
+  // Select all inputs inside the "auto-update-group" div
+  const inputs = document.querySelectorAll('.auto-update-group input');
+  inputs.forEach(input => {
+    // 'input' event fires immediately when typing/spinner changes
+    input.addEventListener('input', () => {
+      // Rebuild model but do not reset simulation running state (unless necessary)
+      buildVehicle(true); // pass true to indicate it's an auto-update
+    });
+  });
+}
+
 // --- CONTROLS ---
 document.getElementById('solveBtn').onclick = () => { isRunning = true; };
 document.getElementById('stopBtn').onclick = () => { isRunning = false; };
+document.getElementById('updateBtn').onclick = () => buildVehicle(false); // Manual reset
 
 // --- VEHICLE BUILDER ---
-function buildVehicle() {
-  isRunning = false;
+function buildVehicle(isAutoUpdate = false) {
+  // Only stop simulation if manual reset. If auto-updating, we can keep "running" logic
+  // but usually changing mass/geometry mid-sim causes explosions. 
+  // Safer to pause or reset. Let's reset sim time if manual.
+  if(!isAutoUpdate) {
+    isRunning = false;
+    simTime = 0;
+  }
+  
   vehicleGroup.clear();
   
   const L1 = getVal('box1_L'), W1 = getVal('box1_W'), H1 = getVal('box1_H');
@@ -290,14 +314,14 @@ function buildVehicle() {
     vehicleGroup.add(mesh);
   });
 
-  state.z = CG.z + 20; 
-  state.phi = 0; state.theta = 0;
-  state.dz = 0; state.dphi = 0; state.dtheta = 0;
-  state.zw.FL = state.zw.FR = state.zw.RL = state.zw.RR = CG.z;
-  simTime = 0;
+  // Reset Physics State if Manual or First Load
+  if(!isAutoUpdate || simTime === 0) {
+    state.z = CG.z + 20; 
+    state.phi = 0; state.theta = 0;
+    state.dz = 0; state.dphi = 0; state.dtheta = 0;
+    state.zw.FL = state.zw.FR = state.zw.RL = state.zw.RR = CG.z;
+  }
 }
-
-document.getElementById('updateBtn').onclick = buildVehicle;
 
 // --- ROAD FEATURES ---
 function addFeatureMesh(geom, color, x, y) {
@@ -327,25 +351,40 @@ document.getElementById('addFeatureBtn').onclick = () => {
 };
 
 function addSpeedBump(h, w, y) {
-  const W = getVal('box1_W') * 4; 
+  // Full Bump: Always spans the vehicle width + extra
+  const carWidth = getVal('box1_W');
+  const W = carWidth * 3; // Ensure it covers track width easily
   const r = w/2;
   const shape = new THREE.Shape();
   shape.moveTo(-r,0); shape.absarc(0,0,r,0,Math.PI,false); shape.lineTo(r,0);
   const geom = new THREE.ExtrudeGeometry(shape, {depth:W, bevelEnabled:false});
   geom.rotateX(Math.PI/2); geom.rotateZ(Math.PI/2);
+  
+  // Center at X=0
   const mesh = addFeatureMesh(geom, 0x888888, 0, y);
+  
   roadFeatures.push({id: nextFeatureId++, type:'bump', params:{h,w,y}, mesh});
   refreshFeatures();
 }
 
 function addHalfSpeedBump(h, w, y, side) {
-  const W = getVal('box1_W') * 1.5;
+  // Half Bump: Needs to align with the specific wheel track
+  const carWidth = getVal('box1_W');
+  const trackX = carWidth / 2; // Roughly where wheels are
+  
+  // Visual width of the bump (narrower than full)
+  const bumpLatWidth = carWidth * 0.4; 
+  
   const r = w/2;
   const shape = new THREE.Shape();
   shape.moveTo(-r,0); shape.absarc(0,0,r,0,Math.PI,false); shape.lineTo(r,0);
-  const geom = new THREE.ExtrudeGeometry(shape, {depth:W, bevelEnabled:false});
+  const geom = new THREE.ExtrudeGeometry(shape, {depth:bumpLatWidth, bevelEnabled:false});
   geom.rotateX(Math.PI/2); geom.rotateZ(Math.PI/2);
-  const xOff = (side==='left' ? -1 : 1) * (W/2 + 10);
+  
+  // Calculate X offset
+  // Left Wheel is at -trackX. Right Wheel is at +trackX.
+  const xOff = (side==='left' ? -trackX : trackX);
+  
   const mesh = addFeatureMesh(geom, 0x777777, xOff, y);
   roadFeatures.push({id: nextFeatureId++, type:'half-bump', params:{h,w,y,side}, mesh});
   refreshFeatures();
@@ -375,6 +414,9 @@ function getRoadZ(x, y) {
     const r = f.params.w/2;
     if(Math.abs(dy) < r) {
       if(f.type === 'half-bump') {
+        // Robust Filtering:
+        // Left bump only affects wheels on Left (x < 0)
+        // Right bump only affects wheels on Right (x > 0)
         if(f.params.side === 'left' && x > 0) continue;
         if(f.params.side === 'right' && x < 0) continue;
       }
