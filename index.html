@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8" />
-<title>Vehicle Dynamics - Fixed</title>
+<title>Vehicle Dynamics - Controlled</title>
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <style>
   body { margin:0; font-family:sans-serif; background:#eaeaea; overflow: hidden; }
@@ -16,11 +16,19 @@
   input[type="number"] { width:100%; padding:4px; font-size:11px; border:1px solid #ccc; border-radius: 3px; }
   .units { float:right; font-size:9px; color:#999; }
   
-  button { width:100%; margin-top:10px; padding:8px; font-size:11px; cursor:pointer; background: #e0e0e0; border: 1px solid #bbb; border-radius: 3px; transition: background 0.2s; }
+  /* Button Styles */
+  button { width:100%; margin-top:5px; padding:8px; font-size:11px; cursor:pointer; background: #e0e0e0; border: 1px solid #bbb; border-radius: 3px; transition: background 0.2s; }
   button:hover { background: #d0d0d0; }
+  
+  /* Specific Button Colors */
+  #solveBtn { background: #d4edda; border-color: #c3e6cb; color: #155724; font-weight: bold; }
+  #solveBtn:hover { background: #c3e6cb; }
+  
+  #stopBtn { background: #f8d7da; border-color: #f5c6cb; color: #721c24; font-weight: bold; }
+  #stopBtn:hover { background: #f5c6cb; }
 
   #featureList div { background: #fff; padding: 4px; border: 1px solid #ddd; margin-top: 4px; font-size: 11px; display: flex; justify-content: space-between; align-items: center; }
-  #featureList button { width: auto; margin: 0; padding: 2px 6px; font-size: 10px; height: auto; }
+  #featureList button { width: auto; margin: 0; padding: 2px 6px; font-size: 10px; height: auto; background: #eee; border:1px solid #ccc; }
 </style>
 
 <script type="importmap">
@@ -82,7 +90,11 @@
     <label>Gravity <span class="units">in/s²</span><input id="veh_g" type="number" value="386.1"></label>
   </div>
   
-  <button id="updateBtn">Update Vehicle</button>
+  <div class="grid2" style="margin-top:10px;">
+    <button id="solveBtn">► Solve</button>
+    <button id="stopBtn">■ Stop</button>
+  </div>
+  <button id="updateBtn">Reset / Update Vehicle</button>
 
   <h3>Road Features</h3>
   <div class="grid2">
@@ -108,11 +120,11 @@ let nextFeatureId = 1;
 let simTime = 0;
 let massProps = null;
 let wheelOffsets = null;
+let isRunning = false; // Simulation Flag
 
-// FIX: Define dt HERE so it exists before animate() is called
-const dt = 1/120; 
+const dt = 1/120; // Fixed Time Step
 
-// Physics State [z, phi, theta, dz, dphi, dtheta, ...zw, ...dzw]
+// Physics State
 const state = {
   z: 40, phi: 0, theta: 0,
   dz: 0, dphi: 0, dtheta: 0,
@@ -159,7 +171,7 @@ function init() {
   groundGroup = new THREE.Group();
   scene.add(groundGroup);
   vehicleGroup = new THREE.Group();
-  scene.add(vehicleGroup); // This group will move with physics CG
+  scene.add(vehicleGroup);
 
   // Floor
   const floor = new THREE.Mesh(
@@ -183,14 +195,20 @@ function init() {
 
 function getVal(id) { return parseFloat(document.getElementById(id).value) || 0; }
 
+// --- CONTROLS ---
+document.getElementById('solveBtn').onclick = () => { isRunning = true; };
+document.getElementById('stopBtn').onclick = () => { isRunning = false; };
+
 // --- VEHICLE BUILDER ---
 function buildVehicle() {
+  // Reset Simulation when rebuilding
+  isRunning = false;
   vehicleGroup.clear();
   
   // 1. Gather Geometry Inputs
   const L1 = getVal('box1_L'), W1 = getVal('box1_W'), H1 = getVal('box1_H');
   const L2 = getVal('box2_L'), W2 = getVal('box2_W'), H2 = getVal('box2_H');
-  const dY = getVal('box2_dY'); // Box 2 Front Offset
+  const dY = getVal('box2_dY'); 
   const R  = getVal('wheel_D') / 2;
   
   const g = getVal('veh_g');
@@ -208,7 +226,7 @@ function buildVehicle() {
     z: (m1*c1.z + m2*c2.z) / M
   };
 
-  // 3. Calculate Inertia (Parallel Axis Theorem)
+  // 3. Calculate Inertia (Parallel Axis)
   const Ixx1 = (m1/12)*(L1*L1 + H1*H1);
   const Ixx2 = (m2/12)*(L2*L2 + H2*H2);
   const dy1 = c1.y-CG.y, dz1 = c1.z-CG.z;
@@ -217,8 +235,8 @@ function buildVehicle() {
 
   const Iyy1 = (m1/12)*(W1*W1 + H1*H1);
   const Iyy2 = (m2/12)*(W2*W2 + H2*H2);
-  const dx1 = c1.x-CG.x; // 0
-  const dx2 = c2.x-CG.x; // 0
+  const dx1 = c1.x-CG.x;
+  const dx2 = c2.x-CG.x;
   const Iyy = (Iyy1 + m1*(dx1*dx1 + dz1*dz1)) + (Iyy2 + m2*(dx2*dx2 + dz2*dz2));
 
   massProps = { M, CG, Ixx, Iyy };
@@ -237,13 +255,13 @@ function buildVehicle() {
   vehicleGroup.add(b2);
 
   // Wheels
-  const wheelGeo = new THREE.CylinderGeometry(R, R, W1*0.2, 24); // Width proportional to car
+  const wheelGeo = new THREE.CylinderGeometry(R, R, W1*0.2, 24);
   wheelGeo.rotateZ(Math.PI/2);
   const wheelMat = new THREE.MeshStandardMaterial({color: 0x222222});
 
   const yF = getVal('wheel_Yf');
   const yR = yF - getVal('wheel_dYr');
-  const xW = W1/2; // Approx track width
+  const xW = W1/2; 
 
   const wheels = [
     {n:'FL', x: -xW, y: yF}, {n:'FR', x: xW, y: yF},
@@ -259,14 +277,13 @@ function buildVehicle() {
   wheels.forEach(w => {
     const mesh = new THREE.Mesh(wheelGeo, wheelMat);
     mesh.name = "W_" + w.n;
-    // Initial local pos relative to CG
     mesh.position.set(w.x - CG.x, w.y - CG.y, R - CG.z); 
     mesh.castShadow = true;
     vehicleGroup.add(mesh);
   });
 
-  // Reset Physics State
-  state.z = CG.z + 20; // Drop from height
+  // Reset State
+  state.z = CG.z + 20; 
   state.phi = 0; state.theta = 0;
   state.dz = 0; state.dphi = 0; state.dtheta = 0;
   state.zw.FL = state.zw.FR = state.zw.RL = state.zw.RR = CG.z;
@@ -276,7 +293,6 @@ function buildVehicle() {
 document.getElementById('updateBtn').onclick = buildVehicle;
 
 // --- ROAD FEATURES ---
-// Helper: Add visual mesh for bump
 function addFeatureMesh(geom, color, x, y) {
   const mesh = new THREE.Mesh(geom, new THREE.MeshStandardMaterial({color}));
   mesh.position.set(x, y, 0);
@@ -286,7 +302,7 @@ function addFeatureMesh(geom, color, x, y) {
 }
 
 document.getElementById('addBumpBtn').onclick = () => {
-  const h = 3, w = 24, y = 100 + roadFeatures.length*100; // Auto-space
+  const h = 3, w = 24, y = 100 + roadFeatures.length*100;
   addSpeedBump(h, w, y);
 };
 
@@ -375,7 +391,6 @@ function getDerivatives(t, s) {
     const dzw = s[10+i];
 
     // Suspension
-    // Body height at wheel corner
     const zb = z - phi*wOff.x + theta*wOff.y;
     const dzb = dz - dphi*wOff.x + dtheta*wOff.y;
     
@@ -383,28 +398,18 @@ function getDerivatives(t, s) {
     const k_s = isFront ? getVal('k_sf') : getVal('k_sr');
     const c_s = isFront ? getVal('c_sf') : getVal('c_sr');
     
-    // Model: Force = k * (FreeLen - (zb - zw)). 
     const freeLen = 25; 
     const comp = freeLen - (zb - zw);
     const dcomp = -(dzb - dzw);
     const F_susp = Math.max(0, k_s * comp + c_s * dcomp);
     
-    // Sum Body Forces
     FzBody += F_susp;
-    Tx += F_susp * wOff.y; // Pitch
-    Ty -= F_susp * wOff.x; // Roll
+    Tx += F_susp * wOff.y;
+    Ty -= F_susp * wOff.x;
 
     // Tire
     const roadY = wOff.y + (v * t);
-    const roadX = wOff.x; 
-    // Absolute X for road lookup (Wheel Offset from CG + CG X position)
-    // Assuming we drive straight down Y, CG X is constant at massProps.CG.x relative to road center 0?
-    // Actually, road is centered at x=0. 
-    // wOff.x is wheel relative to CG. 
-    // If CG is at x=0 (symmetric), absX = wOff.x.
-    // If CG is offset, we need to account for that.
     const absX = wOff.x + massProps.CG.x;
-    
     const roadZ = getRoadZ(absX, roadY);
     
     const pen = roadZ - (zw - R);
@@ -457,7 +462,7 @@ function stepRK4(dt) {
 // --- ANIMATION ---
 function animate() {
   requestAnimationFrame(animate);
-  if(massProps) stepRK4(dt);
+  if(isRunning && massProps) stepRK4(dt);
   
   // Sync Visuals
   vehicleGroup.position.set(0, 0, state.z);
@@ -470,15 +475,9 @@ function animate() {
   // Move Wheels (Locally)
   if(wheelOffsets) {
     const names = ['FL','FR','RL','RR'];
-    const R = getVal('wheel_D')/2;
     names.forEach(n => {
       const mesh = vehicleGroup.getObjectByName("W_"+n);
       if(mesh) {
-        // mesh is child of vehicleGroup (which is at state.z)
-        // mesh.position.z needs to be (zw - state.z) + offsets
-        // BUT mesh was created at (R - CG.z). 
-        // We want absolute Z of center to be zw.
-        // So local z = zw - state.z.
         mesh.position.z = state.zw[n] - state.z;
       }
     });
