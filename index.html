@@ -2,8 +2,11 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8" />
-<title>Vehicle Dynamics - Rough Road</title>
+<title>Vehicle Dynamics - 3D Rough Road</title>
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
 <style>
   body { margin:0; font-family:sans-serif; background:#eaeaea; overflow: hidden; }
   #container { display:flex; height:100vh; width: 100vw; flex-direction: column; }
@@ -52,7 +55,6 @@
   }
 }
 </script>
-<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 </head>
 
 <body>
@@ -130,8 +132,8 @@
           </select>
         </label>
         <label>Height/Roughness <span class="units">in</span><input id="feat_H" type="number" value="3"></label>
-        <label>Length Y <span class="units">in</span><input id="feat_W" type="number" value="24"></label>
-        <label>Location Y <span class="units">in</span><input id="feat_Y" type="number" value="100"></label>
+        <label>Length Y <span class="units">in</span><input id="feat_W" type="number" value="200"></label>
+        <label>Location Y <span class="units">in</span><input id="feat_Y" type="number" value="200"></label>
       </div>
       <button id="addFeatureBtn">+ Add Feature</button>
       
@@ -161,6 +163,7 @@ let massProps = null;
 let wheelOffsets = null;
 let isRunning = false;
 
+// Chart Globals
 let chartInstance = null;
 const maxDataPoints = 200; 
 let chartUpdateCounter = 0;
@@ -191,7 +194,7 @@ function init() {
   THREE.Object3D.DEFAULT_UP.set(0,0,1);
 
   camera = new THREE.PerspectiveCamera(45, container.clientWidth / container.clientHeight, 1, 10000);
-  camera.position.set(300, -600, 400);
+  camera.position.set(400, -800, 500);
 
   renderer = new THREE.WebGLRenderer({antialias:true});
   renderer.setSize(container.clientWidth, container.clientHeight);
@@ -201,6 +204,7 @@ function init() {
   controls = new OrbitControls(camera, renderer.domElement);
   controls.enableDamping = true;
   
+  // Lights
   scene.add(new THREE.HemisphereLight(0xffffff, 0x444444, 0.6));
   const dirLight = new THREE.DirectionalLight(0xffffff, 0.8);
   dirLight.position.set(100, -300, 500);
@@ -211,11 +215,13 @@ function init() {
   dirLight.shadow.camera.left = -500; dirLight.shadow.camera.right = 500;
   scene.add(dirLight);
 
+  // Groups
   groundGroup = new THREE.Group();
   scene.add(groundGroup);
   vehicleGroup = new THREE.Group();
   scene.add(vehicleGroup);
 
+  // Floor
   const floor = new THREE.Mesh(
     new THREE.PlaneGeometry(10000, 10000), 
     new THREE.MeshStandardMaterial({ color: 0xbbbbbb, depthWrite: false })
@@ -223,6 +229,7 @@ function init() {
   floor.receiveShadow = true;
   groundGroup.add(floor);
 
+  // Grid
   const grid = new THREE.GridHelper(10000, 100, 0x999999, 0xcccccc);
   grid.rotation.x = Math.PI/2;
   groundGroup.add(grid);
@@ -454,7 +461,7 @@ function addFeatureMesh(geom, color, x, y) {
 document.getElementById('addFeatureBtn').onclick = () => {
   const type = document.getElementById('feat_Type').value;
   const h = getVal('feat_H');
-  const w = getVal('feat_W'); // Length in Y
+  const w = getVal('feat_W'); 
   const y = getVal('feat_Y');
   
   if (type === 'full') {
@@ -500,14 +507,48 @@ function addHalfSpeedBump(h, w, y, side) {
   refreshFeatures();
 }
 
-function addRoughPatch(h, w, y) { const carWidth = getVal('box1_W'); // // Re-orient PlaneGeometry: Width in X, Length in Y const geom = new THREE.PlaneGeometry(carWidth * 2, w); // // Rotate plane flat so it faces upwards geom.rotateX(-Math.PI/2); // // Create brown standard material as described in the sources const material = new THREE.MeshStandardMaterial({color: 0x8B4513}); // // Note: While sources describe standard materials, they do not provide sources for 3D texture files. // Create mesh with standard material only const mesh = new THREE.Mesh(geom, material); // // Position visual plane based on source logic mesh.position.set(0, y, 0.5); // groundGroup.add(mesh); // roadFeatures.push({id: nextFeatureId++, type:'rough', params:{h,w,y}, mesh}); // refreshFeatures(); // }
-
+function addRoughPatch(h, w, y) {
+  const carWidth = getVal('box1_W');
+  const width = carWidth * 3; 
+  
+  // Create rough geometry
+  const segmentsW = 20;
+  const segmentsH = Math.max(5, Math.floor(w / 10));
+  const geom = new THREE.PlaneGeometry(width, w, segmentsW, segmentsH);
+  
+  // Randomize Vertices for 3D look
+  const pos = geom.attributes.position;
+  for(let i=0; i<pos.count; i++) {
+    const z = pos.getZ(i);
+    // Perturb height
+    pos.setZ(i, z + (Math.random()-0.5)*2.0);
+  }
+  geom.computeVertexNormals();
+  
+  // Rotate to lie flat (Plane is XY, we want XZ)
+  geom.rotateX(-Math.PI/2);
+  
+  const mat = new THREE.MeshStandardMaterial({
+    color: 0x8B4513, 
+    roughness: 1.0, 
+    flatShading: true
+  });
+  const mesh = new THREE.Mesh(geom, mat);
+  
+  // Center at Y
+  mesh.position.set(0, y, 0.5);
+  groundGroup.add(mesh);
+  
+  roadFeatures.push({id: nextFeatureId++, type:'rough', params:{h,w,y}, mesh});
+  refreshFeatures();
+}
 
 function refreshFeatures() {
   const div = document.getElementById('featureList');
   div.innerHTML = roadFeatures.map((f,i) => {
     let desc = f.type;
     if(f.type==='half-bump') desc = f.params.side==='left' ? '½L' : '½R';
+    if(f.type==='rough') desc = 'Rough';
     return `<div>
        <span><b>${desc}</b> @${f.params.y.toFixed(0)}</span>
        <button onclick="window.delFeat(${i})">x</button>
@@ -527,35 +568,25 @@ function getRoadZ(x, y) {
     
     // ROUGH PATCH
     if(f.type === 'rough') {
-      // Box check: y within [center - w/2, center + w/2]
-      if (y >= (f.params.y - f.params.w/2) && y <= (f.params.y + f.params.w/2)) {
-        // Deterministic Noise using sum of sines
-        // h is Amplitude.
-        // Frequencies chosen to look like rough terrain
+      const w = f.params.w; // Road Length
+      const startY = f.params.y - w/2;
+      const endY = f.params.y + w/2;
+      
+      const width = getVal('box1_W') * 3; // Visual width
+      const minX = -width/2; 
+      const maxX = width/2;
+
+      if (y >= startY && y <= endY) {
+        // Deterministic Noise
         const rough = f.params.h * (
           0.5 * Math.sin(0.1 * y) * Math.sin(0.1 * x) +
           0.3 * Math.sin(0.3 * y + 1.2) +
           0.2 * Math.sin(0.5 * x + 0.5 * y)
         );
-        // We add roughness to base Z? Or replace? 
-        // Bumps usually take max. Roughness usually adds to terrain.
-        // Let's assume roughness is ON TOP of flat ground (0).
-        // Since noise can be negative, let's offset it or take ABS if we want "rocks".
-        // Let's just return the noise (shifted up so min is ~0 if needed, or allow pits).
-        // Allowing pits (negative Z) is fine.
-        // But we want to mix with bumps? 
-        // Max(z, rough) might hide pits.
-        // Let's add roughness effect.
-        // Simple: just set z = rough. 
-        // If there's a bump AND rough road? Edge case.
-        // Let's replace Z with roughness if in zone.
         z = rough;
       }
       continue;
     }
-
-
-
 
     // BUMPS
     const dy = y - f.params.y;
