@@ -500,26 +500,8 @@ function addHalfSpeedBump(h, w, y, side) {
   refreshFeatures();
 }
 
-function addRoughPatch(h, w, y) {
-  // Visual: Brown plane
-  const carWidth = getVal('box1_W');
-  const geom = new THREE.PlaneGeometry(carWidth * 2, w);
-  // PlaneGeometry is created at origin. Rotate flat.
-  geom.rotateX(-Math.PI/2); // Facing Up.
-  // Center is at 0,0. We need to move it to y + w/2? 
-  // No, input y usually means "start".
-  // Plane center will be at y + w/2.
-  // Z up a tiny bit to avoid z-fighting
-  const mesh = new THREE.Mesh(geom, new THREE.MeshStandardMaterial({color: 0x8B4513}));
-  mesh.position.set(0, y, 0.5); // Start visual at y? No, center at y.
-  // Wait, standard bump inputs use y as CENTER usually.
-  // Let's stick to Y = Center of feature.
-  mesh.position.set(0, y, 0.5);
-  groundGroup.add(mesh);
-  
-  roadFeatures.push({id: nextFeatureId++, type:'rough', params:{h,w,y}, mesh});
-  refreshFeatures();
-}
+function addRoughPatch(h, w, y) { const carWidth = getVal('box1_W'); // // Re-orient PlaneGeometry: Width in X, Length in Y const geom = new THREE.PlaneGeometry(carWidth * 2, w); // // Rotate plane flat so it faces upwards geom.rotateX(-Math.PI/2); // // Create brown standard material as described in the sources const material = new THREE.MeshStandardMaterial({color: 0x8B4513}); // // Note: While sources describe standard materials, they do not provide sources for 3D texture files. // Create mesh with standard material only const mesh = new THREE.Mesh(geom, material); // // Position visual plane based on source logic mesh.position.set(0, y, 0.5); // groundGroup.add(mesh); // roadFeatures.push({id: nextFeatureId++, type:'rough', params:{h,w,y}, mesh}); // refreshFeatures(); // }
+
 
 function refreshFeatures() {
   const div = document.getElementById('featureList');
@@ -571,6 +553,9 @@ function getRoadZ(x, y) {
       }
       continue;
     }
+
+
+
 
     // BUMPS
     const dy = y - f.params.y;
@@ -699,6 +684,7 @@ function animate() {
 </script>
 </body>
 </html>
+
 
 
 
